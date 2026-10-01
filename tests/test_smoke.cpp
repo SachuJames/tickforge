@@ -3,11 +3,10 @@
 // Day 01 smoke test: proves the test binary builds, links against the
 // TickForge core headers, runs under CTest, and sees the project version.
 
-#include <string>
+#include "tickforge/version.hpp"
 
 #include <gtest/gtest.h>
-
-#include "tickforge/version.hpp"
+#include <string>
 
 namespace {
 
@@ -33,4 +32,4 @@ TEST(VersionTest, ProjectNameIsTickForge) {
   EXPECT_EQ(tickforge::kProjectName, "TickForge");
 }
 
-}  // namespace
+} // namespace

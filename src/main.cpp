@@ -3,9 +3,9 @@
 // Day 01 entry point. Proves the project configures, compiles, links, and
 // runs. Simulation subsystems are specified in SPEC.md and arrive later.
 
-#include <iostream>
-
 #include "tickforge/version.hpp"
+
+#include <iostream>
 
 int main() {
   std::cout << "TickForge v" << tickforge::kVersion << "\n";
