@@ -1,0 +1,27 @@
+# TickForge clang-tidy baseline (Day 01).
+# Deliberately small: bug classes, analyzer, and safe modernizations only.
+# Run with: clang-tidy <files> -p <build dir>
+# See CONTRIBUTING.md for the local workflow.
+
+Checks: >-
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  misc-*,
+  -misc-non-private-member-variables-in-classes,
+  -readability-magic-numbers,
+  -modernize-use-trailing-return-type
+
+WarningsAsErrors: ''
+HeaderFilterRegex: 'tickforge/.*'
+CheckOptions:
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
