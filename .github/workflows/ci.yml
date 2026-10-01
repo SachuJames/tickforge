@@ -1,0 +1,82 @@
+# TickForge CI: configure, build, test, format check, sanitizers.
+# Runs on every push and pull request.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: build+test (${{ matrix.compiler }}, ${{ matrix.build_type }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc, clang]
+        build_type: [Debug, Release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build ${{ matrix.compiler == 'clang' && 'clang' || 'g++' }}
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.compiler == 'clang' && 'clang++' || 'g++' }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  sanitizers:
+    name: sanitizers (ASan + UBSan)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++
+
+      - name: Configure (asan preset)
+        run: cmake --preset asan -DCMAKE_CXX_COMPILER=g++
+
+      - name: Build (asan preset)
+        run: cmake --build --preset asan
+
+      - name: Test (asan preset)
+        run: ctest --preset asan
+
+  format:
+    name: clang-format check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: clang-format --dry-run --Werror src/main.cpp tests/test_smoke.cpp
+
+  tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ clang-tidy
+
+      - name: Configure (compile commands)
+        run: cmake --preset default -DCMAKE_CXX_COMPILER=g++
+
+      - name: Run clang-tidy
+        run: clang-tidy src/main.cpp tests/test_smoke.cpp -p build
