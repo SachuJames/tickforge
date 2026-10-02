@@ -45,19 +45,23 @@ TEST(EventValidationTest, ValidNewOrder) {
 }
 
 TEST(EventValidationTest, NewOrderRejectsZeroPrice) {
-  EXPECT_EQ(validateEvent(makeNewOrder(Price{0}, Quantity{10})), EventValidationError::InvalidPrice);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{0}, Quantity{10})),
+            EventValidationError::InvalidPrice);
 }
 
 TEST(EventValidationTest, NewOrderRejectsNegativePrice) {
-  EXPECT_EQ(validateEvent(makeNewOrder(Price{-1}, Quantity{10})), EventValidationError::InvalidPrice);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{-1}, Quantity{10})),
+            EventValidationError::InvalidPrice);
 }
 
 TEST(EventValidationTest, NewOrderRejectsZeroQuantity) {
-  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{0})), EventValidationError::InvalidQuantity);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{0})),
+            EventValidationError::InvalidQuantity);
 }
 
 TEST(EventValidationTest, NewOrderRejectsNegativeQuantity) {
-  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{-5})), EventValidationError::InvalidQuantity);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{-5})),
+            EventValidationError::InvalidQuantity);
 }
 
 TEST(EventValidationTest, RejectsEmptyInstrument) {
