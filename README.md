@@ -21,6 +21,10 @@ Day 01 establishes the engineering foundation only:
 * CMake presets for Debug, Release, and sanitizer (ASan + UBSan) builds.
 * clang-format and clang-tidy configuration.
 * GitHub Actions CI (build matrix, tests, format check, sanitizer build).
+* Canonical normalized event model: strongly typed `Timestamp`, `Sequence`,
+  `OrderId`, `Price` (integer ticks), `Quantity` (integer lots), `Side`,
+  `EventType`, and `Event` with `(timestamp, seq)` ordering and explicit
+  validation (`tickforge_event` library, tested).
 
 The matching engine, order book, replay engine, and benchmarks are **specified but not implemented**. See SPEC.md and ARCHITECTURE.md for the design they will follow.
 

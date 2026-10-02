@@ -208,3 +208,29 @@ The `src/` tree will grow one directory per layer (e.g. `src/replay/`,
 `src/book/`, `src/matching/`) as milestones land. No layer may include
 headers from a layer above it in the diagram except through the
 extension-point interfaces.
+
+---
+
+## 7. Event model placement (Day 02)
+
+The canonical normalized event model lives in:
+
+* `include/tickforge/event/` — public domain types: `Timestamp`,
+  `Sequence`, `OrderId`, `Price`, `Quantity`, `Side`, `EventType`,
+  `EventKey`, `Event`, and `validateEvent()`.
+* `src/event/` — non-trivial function definitions (enum stringification,
+  event validation), compiled into the `tickforge_event` static library.
+
+Design notes:
+
+* The normalized `Event` is the reproducibility boundary from section 5:
+  parsers produce it, the replay engine will consume it.
+* Total ordering lives with the model: `EventKey` plus `operator<` on
+  `Event` implement the `(timestamp, seq)` order from SPEC.md 3.2. The
+  future replay engine sorts by this operator; ordering logic is not
+  duplicated in the engine.
+* Construction never validates. `validateEvent()` is the explicit gate
+  between parsing and replay, returning a reason-coded error per
+  SPEC.md section 11.
+* No order-book, matching, or replay logic lives here. Day 02 ends at the
+  event model.
