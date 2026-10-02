@@ -12,7 +12,13 @@ Checks: >-
   misc-*,
   -misc-non-private-member-variables-in-classes,
   -readability-magic-numbers,
-  -modernize-use-trailing-return-type
+  -modernize-use-trailing-return-type,
+  # Noise for this codebase: single-letter names are idiomatic in comparison
+  # operators and small test scopes; renaming them adds churn, not clarity.
+  -readability-identifier-length,
+  # Noise: event.hpp is the public umbrella header; forcing every TU to
+  # include each sub-header directly is clutter, not hygiene.
+  -misc-include-cleaner
 
 WarningsAsErrors: ''
 HeaderFilterRegex: 'tickforge/.*'
@@ -25,5 +31,9 @@ CheckOptions:
     value: camelBack
   - key: readability-identifier-naming.ConstantCase
     value: camelBack
+  # Enumerators use CamelCase (Side::Bid, EventType::NewOrder); constexpr
+  # variables use camelBack (kVersion). The check needs both spelled out.
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
   - key: readability-identifier-naming.VariableCase
     value: lower_case
