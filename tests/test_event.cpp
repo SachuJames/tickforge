@@ -3,11 +3,10 @@
 // Tests for the canonical Event: construction, equality, EventKey
 // extraction, and the (timestamp, sequence) ordering from SPEC.md 3.2.
 
-#include <cstdint>
-
-#include <gtest/gtest.h>
-
 #include "tickforge/event/event.hpp"
+
+#include <cstdint>
+#include <gtest/gtest.h>
 
 namespace {
 
@@ -129,4 +128,4 @@ TEST(EventTest, OrderingIgnoresNonKeyFields) {
   EXPECT_GE(a, b);
 }
 
-}  // namespace
+} // namespace

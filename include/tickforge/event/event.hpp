@@ -19,12 +19,12 @@
 
 #pragma once
 
-#include <cstdint>
-#include <string>
-
 #include "tickforge/event/event_type.hpp"
 #include "tickforge/event/side.hpp"
 #include "tickforge/event/types.hpp"
+
+#include <cstdint>
+#include <string>
 
 namespace tickforge {
 
@@ -96,4 +96,4 @@ enum class EventValidationError : std::uint8_t {
 [[nodiscard]] std::string_view toString(EventValidationError error) noexcept;
 [[nodiscard]] EventValidationError validateEvent(const Event& event) noexcept;
 
-}  // namespace tickforge
+} // namespace tickforge

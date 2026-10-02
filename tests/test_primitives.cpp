@@ -4,13 +4,12 @@
 // OrderId, Price, Quantity. These types are pure values; semantic
 // validation lives in validateEvent(), not in the constructors.
 
+#include "tickforge/event/types.hpp"
+
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <limits>
 #include <unordered_set>
-
-#include <gtest/gtest.h>
-
-#include "tickforge/event/types.hpp"
 
 namespace {
 
@@ -151,4 +150,4 @@ TEST(QuantityTest, TypeItselfDoesNotValidate) {
   EXPECT_EQ(Quantity{-1}.lots(), -1);
 }
 
-}  // namespace
+} // namespace

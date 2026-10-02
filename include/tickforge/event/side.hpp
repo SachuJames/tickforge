@@ -15,4 +15,4 @@ enum class Side : std::uint8_t { Bid, Ask };
 [[nodiscard]] std::string_view toString(Side side) noexcept;
 [[nodiscard]] Side opposite(Side side) noexcept;
 
-}  // namespace tickforge
+} // namespace tickforge

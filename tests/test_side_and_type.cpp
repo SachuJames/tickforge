@@ -2,12 +2,11 @@
 //
 // Tests for the Side and EventType enums.
 
-#include <string_view>
-
-#include <gtest/gtest.h>
-
 #include "tickforge/event/event_type.hpp"
 #include "tickforge/event/side.hpp"
+
+#include <gtest/gtest.h>
+#include <string_view>
 
 namespace {
 
@@ -45,4 +44,4 @@ TEST(EventTypeTest, ToString) {
   EXPECT_EQ(toString(EventType::CancelOrder), std::string_view{"CancelOrder"});
 }
 
-}  // namespace
+} // namespace

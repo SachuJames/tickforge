@@ -3,12 +3,11 @@
 // Tests for validateEvent(): the explicit, separate validation step a
 // parser runs before normalized events reach the replay engine.
 
-#include <cstdint>
-#include <string_view>
-
-#include <gtest/gtest.h>
-
 #include "tickforge/event/event.hpp"
+
+#include <cstdint>
+#include <gtest/gtest.h>
+#include <string_view>
 
 namespace {
 
@@ -136,4 +135,4 @@ TEST(EventValidationTest, ErrorToString) {
             std::string_view{"UnexpectedCancelPayload"});
 }
 
-}  // namespace
+} // namespace

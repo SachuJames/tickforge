@@ -5,14 +5,13 @@
 // depends on this ordering being a strict weak ordering with stable,
 // repeatable sorts.
 
+#include "tickforge/event/event.hpp"
+
 #include <algorithm>
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <random>
 #include <vector>
-
-#include <gtest/gtest.h>
-
-#include "tickforge/event/event.hpp"
 
 namespace {
 
@@ -43,7 +42,7 @@ std::vector<Event> sampleEvents() {
       makeEvent(100, 5),
       makeEvent(99, 100),
       makeEvent(100, 4),
-      makeEvent(100, 4),  // duplicate key, distinct payload identity
+      makeEvent(100, 4), // duplicate key, distinct payload identity
       makeEvent(-50, 0),
       makeEvent(100, 6),
       makeEvent(101, 0),
@@ -128,4 +127,4 @@ TEST(EventOrderingTest, DuplicateKeysAreEquivalentForOrdering) {
   EXPECT_GE(a, b);
 }
 
-}  // namespace
+} // namespace
