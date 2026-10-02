@@ -24,13 +24,13 @@ using tickforge::Sequence;
 using tickforge::Side;
 using tickforge::Timestamp;
 
-Event makeEvent(std::int64_t nanos, std::uint64_t seq) {
+Event makeEvent(Timestamp timestamp, Sequence sequence) {
   Event event;
-  event.timestamp = Timestamp{nanos};
-  event.sequence = Sequence{seq};
+  event.timestamp = timestamp;
+  event.sequence = sequence;
   event.type = EventType::NewOrder;
   event.instrument = "AAPL";
-  event.orderId = OrderId{seq};
+  event.orderId = OrderId{sequence.value()};
   event.side = Side::Bid;
   event.price = Price{100};
   event.quantity = Quantity{10};
@@ -39,13 +39,13 @@ Event makeEvent(std::int64_t nanos, std::uint64_t seq) {
 
 std::vector<Event> sampleEvents() {
   return {
-      makeEvent(100, 5),
-      makeEvent(99, 100),
-      makeEvent(100, 4),
-      makeEvent(100, 4), // duplicate key, distinct payload identity
-      makeEvent(-50, 0),
-      makeEvent(100, 6),
-      makeEvent(101, 0),
+      makeEvent(Timestamp{100}, Sequence{5}),
+      makeEvent(Timestamp{99}, Sequence{100}),
+      makeEvent(Timestamp{100}, Sequence{4}),
+      makeEvent(Timestamp{100}, Sequence{4}), // duplicate key, distinct payload identity
+      makeEvent(Timestamp{-50}, Sequence{0}),
+      makeEvent(Timestamp{100}, Sequence{6}),
+      makeEvent(Timestamp{101}, Sequence{0}),
   };
 }
 
@@ -55,6 +55,8 @@ TEST(EventOrderingTest, Irreflexive) {
   }
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): exhaustive
+// triple-nested checking is inherent to proving transitivity over the set.
 TEST(EventOrderingTest, Transitive) {
   const std::vector<Event> events = sampleEvents();
   for (const Event& a : events) {
@@ -119,8 +121,8 @@ TEST(EventOrderingTest, DeterministicSort) {
 }
 
 TEST(EventOrderingTest, DuplicateKeysAreEquivalentForOrdering) {
-  const Event a = makeEvent(100, 4);
-  const Event b = makeEvent(100, 4);
+  const Event a = makeEvent(Timestamp{100}, Sequence{4});
+  const Event b = makeEvent(Timestamp{100}, Sequence{4});
   EXPECT_FALSE(a < b);
   EXPECT_FALSE(b < a);
   EXPECT_LE(a, b);

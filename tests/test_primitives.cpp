@@ -65,11 +65,11 @@ TEST(TimestampTest, CopiesCompareEqual) {
 
 TEST(SequenceTest, ConstructionRoundTrips) {
   const Sequence seq{7};
-  EXPECT_EQ(seq.value(), 7u);
+  EXPECT_EQ(seq.value(), 7U);
 }
 
 TEST(SequenceTest, DefaultIsZero) {
-  EXPECT_EQ(Sequence{}.value(), 0u);
+  EXPECT_EQ(Sequence{}.value(), 0U);
 }
 
 TEST(SequenceTest, EqualityAndOrdering) {
@@ -87,7 +87,7 @@ TEST(SequenceTest, MaxBoundary) {
 
 TEST(OrderIdTest, ConstructionRoundTrips) {
   const OrderId id{12345};
-  EXPECT_EQ(id.value(), 12345u);
+  EXPECT_EQ(id.value(), 12345U);
 }
 
 TEST(OrderIdTest, EqualityOrderingAndHash) {
@@ -101,7 +101,7 @@ TEST(OrderIdTest, UsableAsUnorderedKey) {
   ids.insert(OrderId{1});
   ids.insert(OrderId{2});
   ids.insert(OrderId{1});
-  EXPECT_EQ(ids.size(), 2u);
+  EXPECT_EQ(ids.size(), 2U);
   EXPECT_TRUE(ids.contains(OrderId{1}));
   EXPECT_FALSE(ids.contains(OrderId{99}));
 }

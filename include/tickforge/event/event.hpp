@@ -37,8 +37,8 @@ using Instrument = std::string;
 // sequence number. This is the single reusable ordering mechanism;
 // comparison logic must not be duplicated elsewhere.
 struct EventKey {
-  Timestamp timestamp{};
-  Sequence sequence{};
+  Timestamp timestamp;
+  Sequence sequence;
 
   constexpr bool operator==(const EventKey&) const noexcept = default;
   constexpr auto operator<=>(const EventKey&) const noexcept = default;
@@ -46,14 +46,14 @@ struct EventKey {
 
 // Canonical normalized event.
 struct Event {
-  Timestamp timestamp{};
-  Sequence sequence{};
+  Timestamp timestamp;
+  Sequence sequence;
   EventType type{EventType::NewOrder};
-  Instrument instrument{};
-  OrderId orderId{};
+  Instrument instrument;
+  OrderId orderId;
   Side side{Side::Bid};
-  Price price{};
-  Quantity quantity{};
+  Price price;
+  Quantity quantity;
   std::uint32_t flags{0};
 
   friend bool operator==(const Event& a, const Event& b) noexcept = default;

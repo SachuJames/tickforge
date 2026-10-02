@@ -33,43 +33,43 @@ Event makeEvent(EventType type) {
   return event;
 }
 
-Event makeNewOrder(std::int64_t priceTicks, std::int64_t lots) {
+Event makeNewOrder(Price price, Quantity quantity) {
   Event event = makeEvent(EventType::NewOrder);
-  event.price = Price{priceTicks};
-  event.quantity = Quantity{lots};
+  event.price = price;
+  event.quantity = quantity;
   return event;
 }
 
 TEST(EventValidationTest, ValidNewOrder) {
-  EXPECT_EQ(validateEvent(makeNewOrder(100, 10)), EventValidationError::Ok);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{10})), EventValidationError::Ok);
 }
 
 TEST(EventValidationTest, NewOrderRejectsZeroPrice) {
-  EXPECT_EQ(validateEvent(makeNewOrder(0, 10)), EventValidationError::InvalidPrice);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{0}, Quantity{10})), EventValidationError::InvalidPrice);
 }
 
 TEST(EventValidationTest, NewOrderRejectsNegativePrice) {
-  EXPECT_EQ(validateEvent(makeNewOrder(-1, 10)), EventValidationError::InvalidPrice);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{-1}, Quantity{10})), EventValidationError::InvalidPrice);
 }
 
 TEST(EventValidationTest, NewOrderRejectsZeroQuantity) {
-  EXPECT_EQ(validateEvent(makeNewOrder(100, 0)), EventValidationError::InvalidQuantity);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{0})), EventValidationError::InvalidQuantity);
 }
 
 TEST(EventValidationTest, NewOrderRejectsNegativeQuantity) {
-  EXPECT_EQ(validateEvent(makeNewOrder(100, -5)), EventValidationError::InvalidQuantity);
+  EXPECT_EQ(validateEvent(makeNewOrder(Price{100}, Quantity{-5})), EventValidationError::InvalidQuantity);
 }
 
 TEST(EventValidationTest, RejectsEmptyInstrument) {
-  Event event = makeNewOrder(100, 10);
+  Event event = makeNewOrder(Price{100}, Quantity{10});
   event.instrument.clear();
   EXPECT_EQ(validateEvent(event), EventValidationError::EmptyInstrument);
 }
 
 TEST(EventValidationTest, FlagsAreIgnored) {
   // SPEC.md 2.2: flags default to 0 and are ignored by consumers.
-  Event event = makeNewOrder(100, 10);
-  event.flags = 0xFFFFFFFFu;
+  Event event = makeNewOrder(Price{100}, Quantity{10});
+  event.flags = 0xFFFFFFFFU;
   EXPECT_EQ(validateEvent(event), EventValidationError::Ok);
 }
 
