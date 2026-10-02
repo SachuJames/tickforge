@@ -352,6 +352,10 @@ Stage responsibilities:
 * **Strict mode (default):** the first invalid event (unknown order id on
   cancel/modify, duplicate order id on new, negative quantity, etc.)
   aborts the replay with a diagnostic naming the event `seq` and reason.
+* For order-carrying events (`NewOrder`, `ModifyOrder`), quantity MUST be
+  strictly positive: zero and negative quantities are rejected. A
+  `ModifyOrder` MUST change at least one of price or quantity; an event
+  changing neither is invalid.
 * **Lenient mode:** invalid events are skipped, counted, and reported in
   the run summary. Lenient mode exists for messy real datasets and MUST be
   explicitly selected; its use is recorded in the output.
