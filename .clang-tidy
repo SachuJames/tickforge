@@ -2,6 +2,12 @@
 # Deliberately small: bug classes, analyzer, and safe modernizations only.
 # Run with: clang-tidy <files> -p <build dir>
 # See CONTRIBUTING.md for the local workflow.
+#
+# Disabled checks:
+# - readability-identifier-length: single-letter names are idiomatic in
+#   comparison operators and small test scopes; renaming adds churn.
+# - misc-include-cleaner: event.hpp is the public umbrella header; forcing
+#   every TU to include each sub-header directly is clutter, not hygiene.
 
 Checks: >-
   bugprone-*,
@@ -13,11 +19,7 @@ Checks: >-
   -misc-non-private-member-variables-in-classes,
   -readability-magic-numbers,
   -modernize-use-trailing-return-type,
-  # Noise for this codebase: single-letter names are idiomatic in comparison
-  # operators and small test scopes; renaming them adds churn, not clarity.
   -readability-identifier-length,
-  # Noise: event.hpp is the public umbrella header; forcing every TU to
-  # include each sub-header directly is clutter, not hygiene.
   -misc-include-cleaner
 
 WarningsAsErrors: ''

@@ -101,7 +101,7 @@ TEST(EventOrderingTest, TotalOrderRespectsKey) {
 TEST(EventOrderingTest, DeterministicSort) {
   // Sorting the same events twice, from different starting permutations,
   // must produce the exact same key sequence.
-  auto keysOf = [](std::vector<Event> events) {
+  auto keys_of = [](std::vector<Event> events) {
     std::sort(events.begin(), events.end());
     std::vector<std::uint64_t> keys;
     keys.reserve(events.size());
@@ -116,8 +116,8 @@ TEST(EventOrderingTest, DeterministicSort) {
   std::shuffle(first.begin(), first.end(), std::mt19937{42});
   std::shuffle(second.begin(), second.end(), std::mt19937{1337});
 
-  EXPECT_EQ(keysOf(first), keysOf(second));
-  EXPECT_EQ(keysOf(first), keysOf(sampleEvents()));
+  EXPECT_EQ(keys_of(first), keys_of(second));
+  EXPECT_EQ(keys_of(first), keys_of(sampleEvents()));
 }
 
 TEST(EventOrderingTest, DuplicateKeysAreEquivalentForOrdering) {
