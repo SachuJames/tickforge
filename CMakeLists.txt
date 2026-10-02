@@ -108,6 +108,9 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_smoke.cpp
     tests/test_primitives.cpp
     tests/test_side_and_type.cpp
+    tests/test_event.cpp
+    tests/test_event_ordering.cpp
+    tests/test_event_validation.cpp
   )
   target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event GTest::gtest_main)
 
