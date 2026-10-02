@@ -74,6 +74,14 @@ if(TARGET tickforge_sanitizers)
 endif()
 
 # ---------------------------------------------------------------------------
+# Event model library (Day 02): canonical normalized event types.
+# Public headers live in include/tickforge/event/; non-trivial function
+# definitions live in src/event/.
+# ---------------------------------------------------------------------------
+add_library(tickforge_event STATIC src/event/event.cpp)
+target_link_libraries(tickforge_event PUBLIC tickforge_core)
+
+# ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
@@ -96,8 +104,12 @@ if(TICKFORGE_BUILD_TESTS)
 
   enable_testing()
 
-  add_executable(tickforge_tests tests/test_smoke.cpp)
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core GTest::gtest_main)
+  add_executable(tickforge_tests
+    tests/test_smoke.cpp
+    tests/test_primitives.cpp
+    tests/test_side_and_type.cpp
+  )
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event GTest::gtest_main)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)
