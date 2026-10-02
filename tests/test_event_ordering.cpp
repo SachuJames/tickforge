@@ -55,8 +55,9 @@ TEST(EventOrderingTest, Irreflexive) {
   }
 }
 
-// NOLINTNEXTLINE(readability-function-cognitive-complexity): exhaustive
-// triple-nested checking is inherent to proving transitivity over the set.
+// Exhaustive triple-nested checking is inherent to proving transitivity
+// over the sample set.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST(EventOrderingTest, Transitive) {
   const std::vector<Event> events = sampleEvents();
   for (const Event& a : events) {
