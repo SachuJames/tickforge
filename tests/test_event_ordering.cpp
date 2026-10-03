@@ -58,8 +58,7 @@ TEST(EventOrderingTest, Irreflexive) {
 // Exhaustive triple-nested checking is inherent to proving transitivity
 // over the sample set.
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-TEST(EventOrderingTest, Transitive) {
-  const std::vector<Event> events = sampleEvents();
+void expectTransitiveOrdering(const std::vector<Event>& events) {
   for (const Event& a : events) {
     for (const Event& b : events) {
       for (const Event& c : events) {
@@ -71,8 +70,14 @@ TEST(EventOrderingTest, Transitive) {
   }
 }
 
-TEST(EventOrderingTest, EqualityConsistentWithOrdering) {
-  const std::vector<Event> events = sampleEvents();
+TEST(EventOrderingTest, Transitive) {
+  expectTransitiveOrdering(sampleEvents());
+}
+
+// Exhaustive pairwise checking is inherent to proving equality/ordering
+// consistency over the sample set.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+void expectEqualityConsistentWithOrdering(const std::vector<Event>& events) {
   for (const Event& a : events) {
     for (const Event& b : events) {
       if (a == b) {
@@ -83,6 +88,10 @@ TEST(EventOrderingTest, EqualityConsistentWithOrdering) {
       EXPECT_FALSE(a < b && b < a);
     }
   }
+}
+
+TEST(EventOrderingTest, EqualityConsistentWithOrdering) {
+  expectEqualityConsistentWithOrdering(sampleEvents());
 }
 
 TEST(EventOrderingTest, TotalOrderRespectsKey) {
