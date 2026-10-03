@@ -82,6 +82,22 @@ add_library(tickforge_event STATIC src/event/event.cpp)
 target_link_libraries(tickforge_event PUBLIC tickforge_core)
 
 # ---------------------------------------------------------------------------
+# Replay driver library (Day 03): deterministic event replay.
+# Public headers live in include/tickforge/replay/; the implementation in
+# src/replay/. Knows nothing about market logic.
+# ---------------------------------------------------------------------------
+add_library(tickforge_replay STATIC src/replay/replay.cpp)
+target_link_libraries(tickforge_replay PUBLIC tickforge_core tickforge_event)
+
+# ---------------------------------------------------------------------------
+# Order book library (Day 03): MBO resting-order state.
+# Public headers live in include/tickforge/book/; the implementation in
+# src/book/. Implements the EventProcessor interface; performs no matching.
+# ---------------------------------------------------------------------------
+add_library(tickforge_book STATIC src/book/order_book.cpp)
+target_link_libraries(tickforge_book PUBLIC tickforge_core tickforge_event tickforge_replay)
+
+# ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
@@ -111,8 +127,11 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_event.cpp
     tests/test_event_ordering.cpp
     tests/test_event_validation.cpp
+    tests/test_order_book.cpp
+    tests/test_replay.cpp
+    tests/test_replay_book_integration.cpp
   )
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event GTest::gtest_main)
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book GTest::gtest_main)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)

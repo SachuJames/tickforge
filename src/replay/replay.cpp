@@ -1,0 +1,82 @@
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+//
+// Deterministic replay driver implementation. Single interleaved pass:
+// for each event, in stream order, verify ordering, verify instrument
+// scoping, validate, then dispatch. The first failure aborts the replay
+// with a diagnostic (SPEC.md section 11, strict mode). A mid-stream abort
+// intentionally leaves already-applied events in place: abort means abort,
+// not rollback.
+
+#include "tickforge/replay/replay.hpp"
+
+#include <string_view>
+
+namespace tickforge {
+
+std::string_view toString(ReplayError error) noexcept {
+  switch (error) {
+  case ReplayError::Ok:
+    return "Ok";
+  case ReplayError::UnsortedInput:
+    return "UnsortedInput";
+  case ReplayError::InvalidEvent:
+    return "InvalidEvent";
+  case ReplayError::UnknownOrder:
+    return "UnknownOrder";
+  case ReplayError::DuplicateOrder:
+    return "DuplicateOrder";
+  case ReplayError::InstrumentMismatch:
+    return "InstrumentMismatch";
+  }
+  return "Unknown";
+}
+
+ReplayResult replayEvents(std::span<const Event> events, EventProcessor& processor) {
+  ReplayResult result;
+  if (events.empty()) {
+    return result;
+  }
+
+  const std::string& session_instrument = events.front().instrument;
+
+  for (std::size_t i = 0; i < events.size(); ++i) {
+    const Event& event = events[i];
+
+    // 1. Ordering: strictly increasing (timestamp, seq). Rejects both
+    //    out-of-order events and duplicate keys (SPEC.md 3.3).
+    if (i > 0 && !(events[i - 1] < event)) {
+      result.error = ReplayError::UnsortedInput;
+      result.failedAt = event.sequence;
+      return result;
+    }
+
+    // 2. Session scoping: exactly one instrument per session (SPEC.md 2.2).
+    if (event.instrument != session_instrument) {
+      result.error = ReplayError::InstrumentMismatch;
+      result.failedAt = event.sequence;
+      return result;
+    }
+
+    // 3. Validation gate (SPEC.md section 11).
+    const EventValidationError validation = validateEvent(event);
+    if (validation != EventValidationError::Ok) {
+      result.error = ReplayError::InvalidEvent;
+      result.failedAt = event.sequence;
+      result.validationReason = validation;
+      return result;
+    }
+
+    // 4. Dispatch. A rejection names its reason via the event type:
+    //    cancel/modify of a non-resting order, or a duplicate live id.
+    if (!processor.onEvent(event)) {
+      result.error = event.type == EventType::NewOrder ? ReplayError::DuplicateOrder
+                                                       : ReplayError::UnknownOrder;
+      result.failedAt = event.sequence;
+      return result;
+    }
+  }
+
+  return result;
+}
+
+} // namespace tickforge
