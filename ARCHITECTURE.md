@@ -234,3 +234,122 @@ Design notes:
   SPEC.md section 11.
 * No order-book, matching, or replay logic lives here. Day 02 ends at the
   event model.
+
+---
+
+## 8. Replay driver and order book (Day 03)
+
+Day 03 turns normalized events into deterministic market state:
+
+```text
+Normalized Events
+       |
+       v
+Replay driver  (verify order, scope, validate, dispatch)
+       |
+       v
+EventProcessor (narrow interface: one validated event in, applied or rejected)
+       |
+       v
+OrderBook      (MBO resting-order state; no matching)
+       |
+       v
+Market State   (best bid/ask, price levels, per-order state)
+```
+
+### 8.1 Replay driver
+
+Lives in `include/tickforge/replay/` (`event_processor.hpp`,
+`replay.hpp`) and `src/replay/replay.cpp`, compiled into the
+`tickforge_replay` static library.
+
+Responsibilities, in order, per event:
+
+1. Verify stream order: the input must already be sorted strictly by
+   `Event::operator<` (`(timestamp, seq)`). The driver verifies rather
+   than sorts (SPEC.md 3.3 permits either). Rationale: sorting belongs
+   to the parser / Event Normalization layer, which owns the stream;
+   the replay driver verifies as defense in depth without copying the
+   event stream. Duplicate `(timestamp, seq)` keys are rejected as
+   unsorted input, per SPEC.md 3.3. The input contract is
+   `std::span<const Event>`: non-owning, no copy.
+2. Verify session scoping: exactly one instrument per session
+   (SPEC.md 2.2). A second instrument aborts the replay.
+3. Validate via `validateEvent()` (SPEC.md section 11).
+4. Dispatch to the `EventProcessor`.
+
+The first failure aborts the replay with a diagnostic naming the
+offending event's sequence number and the reason (`ReplayError`:
+`UnsortedInput`, `InvalidEvent`, `UnknownOrder`, `DuplicateOrder`,
+`InstrumentMismatch`). This is the strict-mode behavior of SPEC.md
+section 11. Abort means abort, not rollback: already-applied events
+stay applied.
+
+The driver knows nothing about market logic. It never interprets
+prices, sides, or book structure.
+
+### 8.2 EventProcessor interface
+
+`EventProcessor` is the narrow seam between replay and state. One
+method: `onEvent(const Event&)` applies a single validated event and
+returns true when applied, false when rejected for a state reason
+(cancel/modify of a non-resting order, new order with a live id). The
+replay driver maps the rejection to a `ReplayError` using the event
+type, so the interface stays minimal. Future milestones can add
+processors (matching engine, statistics sinks) without touching the
+replay driver.
+
+### 8.3 Order book
+
+Lives in `include/tickforge/book/order_book.hpp` and
+`src/book/order_book.cpp`, compiled into the `tickforge_book` static
+library. Implements `EventProcessor`. Performs no matching.
+
+Representation (all internals private):
+
+* `orders_`: `OrderId` -> resting order, for O(1) lookup by id. Each
+  entry also stores its position within its price-level queue, so
+  cancellation is O(1) rather than a queue scan.
+* `bids_` / `asks_`: price -> FIFO queue of order ids at that price.
+  Bid levels are ordered highest-first, ask levels lowest-first, so
+  `bestBid()` / `bestAsk()` are O(1). Empty levels are removed when
+  their last order leaves.
+* Each resting order records `OrderId`, `Side`, `Price`, remaining
+  `Quantity`, and `arrivalSeq` (the `NewOrder` event's sequence: the
+  time-priority key). Queue order within a level is `arrivalSeq`
+  order. Order ids never determine priority: ids identify, sequences
+  order.
+
+Behavior:
+
+* `NewOrder`: inserts into the id lookup, the side's price level (at
+  the back of the queue), and updates best bid/ask. A duplicate live
+  id is rejected. The book enforces live-uniqueness only;
+  session-wide id uniqueness is the parser's job (SPEC.md 5.1), since
+  the book cannot distinguish a reused id from a fresh one after
+  cancellation.
+* `CancelOrder`: removes from the queue (preserving the order of the
+  rest), removes the id from the lookup, drops the level if empty,
+  and updates best bid/ask. Cancelling a non-resting order is
+  rejected.
+* `ModifyOrder`: follows SPEC.md 5.5 exactly. Zero price/quantity
+  means "unchanged". A price change or quantity increase is
+  cancel/replace: the order leaves its queue and rejoins at the back
+  of its (possibly new) level with `arrivalSeq` set to the modify
+  event's sequence. A quantity decrease at the same price keeps its
+  queue position and `arrivalSeq`.
+
+Queries are read-only: `contains`, `find` (returns a `RestingOrder`
+view), `bestBid` / `bestAsk` (as `std::optional<Price>`, empty when
+the side is empty), `orderCount`, `priceLevelCount`, and
+`ordersAtLevel` (FIFO-ordered ids at a price). No standard containers
+leak through the public API.
+
+### 8.4 Deliberate Day 03 gap: no matching
+
+Day 03 performs no trade matching. A new order that would cross the
+opposite side still rests in the book, which may leave `bestBid() >=
+bestAsk()` until the matching engine arrives. This is documented in
+the `OrderBook` header and covered by a test so the interim behavior
+is explicit, not accidental. Crossing/matching behavior belongs to
+the matching-engine milestone (SPEC.md 5.4, ARCHITECTURE.md 1.5).
