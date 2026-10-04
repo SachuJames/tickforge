@@ -14,9 +14,11 @@
 //     ids never determine priority: ids identify, sequences order.
 //
 // Day 03 scope notes:
-//   * No matching is performed. A new order that would cross the opposite
-//     side still rests in the book (bestBid() may then be >= bestAsk()).
-//     Crossing/matching behavior belongs to the matching-engine milestone.
+//   * The book performs no matching itself. Matching is the
+//     MatchingEngine's job (Day 04); the engine drives the book through
+//     the public mutation API below. OrderBook::onEvent retains Day 03
+//     semantics: a NewOrder rests without matching. Aggressive handling
+//     belongs to the engine.
 //   * ModifyOrder follows SPEC.md 5.5 exactly: a price change or quantity
 //     increase is cancel/replace (loses time priority, arrivalSeq becomes
 //     the modify event's seq); a quantity decrease at the same price keeps
@@ -69,6 +71,22 @@ public:
   // Order ids resting at the level, in FIFO (arrivalSeq) order.
   // Empty when the level does not exist.
   [[nodiscard]] std::vector<OrderId> ordersAtLevel(Side side, Price price) const;
+  // All price levels on the side, in priority order (best first).
+  [[nodiscard]] std::vector<Price> priceLevels(Side side) const;
+
+  // Controlled mutation API for the matching engine (Day 04). These are
+  // the only way to mutate the book besides onEvent; the engine must not
+  // reach into the book's containers.
+  //
+  // Adds a resting order directly. Returns false if the id is already
+  // live. The caller provides the arrivalSeq (time-priority key).
+  bool addRestingOrder(OrderId id, Side side, Price price, Quantity quantity, Sequence arrivalSeq);
+  // Removes the order. Returns false if not found.
+  bool removeOrder(OrderId id);
+  // Reduces the order's remaining quantity by lots, preserving its queue
+  // position and arrivalSeq. Returns false if not found or if lots
+  // exceeds the remaining quantity. A reduction to zero removes the order.
+  bool reduceQuantity(OrderId id, Quantity lots);
 
 private:
   using Queue = std::list<OrderId>;

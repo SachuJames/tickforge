@@ -98,6 +98,15 @@ add_library(tickforge_book STATIC src/book/order_book.cpp)
 target_link_libraries(tickforge_book PUBLIC tickforge_core tickforge_event tickforge_replay)
 
 # ---------------------------------------------------------------------------
+# Matching engine library (Day 04): deterministic price-time priority
+# execution. Public headers live in include/tickforge/matching/; the
+# implementation in src/matching/. Drives the OrderBook through its public
+# mutation API; the replay driver dispatches to it as an EventProcessor.
+# ---------------------------------------------------------------------------
+add_library(tickforge_matching STATIC src/matching/matching_engine.cpp)
+target_link_libraries(tickforge_matching PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_book)
+
+# ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
@@ -130,8 +139,11 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_order_book.cpp
     tests/test_replay.cpp
     tests/test_replay_book_integration.cpp
+    tests/test_matching.cpp
+    tests/test_matching_properties.cpp
+    tests/test_replay_matching_integration.cpp
   )
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book GTest::gtest_main)
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching GTest::gtest_main)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)

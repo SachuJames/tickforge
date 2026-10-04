@@ -72,6 +72,71 @@ std::vector<OrderId> OrderBook::ordersAtLevel(Side side, Price price) const {
   return ids;
 }
 
+std::vector<Price> OrderBook::priceLevels(Side side) const {
+  std::vector<Price> prices;
+  const auto collect = [&prices](const auto& levels) {
+    prices.reserve(levels.size());
+    for (const auto& [price, level] : levels) {
+      prices.push_back(price);
+    }
+  };
+  if (side == Side::Bid) {
+    collect(bids_);
+  } else {
+    collect(asks_);
+  }
+  return prices;
+}
+
+bool OrderBook::addRestingOrder(
+    OrderId id, Side side, Price price, Quantity quantity, Sequence arrivalSeq) {
+  if (contains(id)) {
+    return false;
+  }
+  Entry entry{RestingOrder{id, side, price, quantity, arrivalSeq}, Queue::iterator{}};
+  if (side == Side::Bid) {
+    insertIntoLevel(bids_, entry);
+  } else {
+    insertIntoLevel(asks_, entry);
+  }
+  orders_.emplace(id, entry);
+  return true;
+}
+
+bool OrderBook::removeOrder(OrderId id) {
+  const auto it = orders_.find(id);
+  if (it == orders_.end()) {
+    return false;
+  }
+  Entry& entry = it->second;
+  if (entry.order.side == Side::Bid) {
+    removeFromLevel(bids_, entry);
+  } else {
+    removeFromLevel(asks_, entry);
+  }
+  orders_.erase(it);
+  return true;
+}
+
+bool OrderBook::reduceQuantity(OrderId id, Quantity lots) {
+  const auto it = orders_.find(id);
+  if (it == orders_.end()) {
+    return false;
+  }
+  Entry& entry = it->second;
+  if (lots.lots() > entry.order.quantity.lots()) {
+    return false;
+  }
+  const Quantity remaining{entry.order.quantity.lots() - lots.lots()};
+  if (remaining.lots() == 0) {
+    return removeOrder(id);
+  }
+  // Queue position and arrivalSeq are untouched: a partial fill never
+  // reorders the level.
+  entry.order.quantity = remaining;
+  return true;
+}
+
 template <typename LevelMap>
 void OrderBook::insertIntoLevel(LevelMap& levels, Entry& entry) {
   Queue& queue = levels[entry.order.price].queue;
@@ -92,35 +157,13 @@ void OrderBook::removeFromLevel(LevelMap& levels, Entry& entry) {
 }
 
 bool OrderBook::applyNew(const Event& event) {
-  if (contains(event.orderId)) {
-    return false;
-  }
-  // Day 03 performs no matching: even a crossing order rests in the book.
-  // Matching behavior belongs to the matching-engine milestone.
-  Entry entry{RestingOrder{event.orderId, event.side, event.price, event.quantity, event.sequence},
-              Queue::iterator{}};
-  if (event.side == Side::Bid) {
-    insertIntoLevel(bids_, entry);
-  } else {
-    insertIntoLevel(asks_, entry);
-  }
-  orders_.emplace(event.orderId, entry);
-  return true;
+  // Note: no matching here. OrderBook::onEvent keeps Day 03 semantics;
+  // aggressive handling is the MatchingEngine's job.
+  return addRestingOrder(event.orderId, event.side, event.price, event.quantity, event.sequence);
 }
 
 bool OrderBook::applyCancel(const Event& event) {
-  const auto it = orders_.find(event.orderId);
-  if (it == orders_.end()) {
-    return false;
-  }
-  Entry& entry = it->second;
-  if (entry.order.side == Side::Bid) {
-    removeFromLevel(bids_, entry);
-  } else {
-    removeFromLevel(asks_, entry);
-  }
-  orders_.erase(it);
-  return true;
+  return removeOrder(event.orderId);
 }
 
 bool OrderBook::applyModify(const Event& event) {
