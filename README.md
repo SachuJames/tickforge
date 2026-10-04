@@ -26,7 +26,7 @@ Day 01 establishes the engineering foundation only:
   `EventType`, and `Event` with `(timestamp, seq)` ordering and explicit
   validation (`tickforge_event` library, tested).
 
-The matching engine and benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`) and the MBO order book (`tickforge_book`, no matching yet) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
+The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), and the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
 
 ## Planned capabilities
 

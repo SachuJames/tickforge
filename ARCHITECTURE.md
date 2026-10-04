@@ -353,3 +353,88 @@ bestAsk()` until the matching engine arrives. This is documented in
 the `OrderBook` header and covered by a test so the interim behavior
 is explicit, not accidental. Crossing/matching behavior belongs to
 the matching-engine milestone (SPEC.md 5.4, ARCHITECTURE.md 1.5).
+
+---
+
+## 9. Matching engine and execution (Day 04)
+
+Day 04 replaces the Day 03 gap with deterministic price-time priority matching:
+
+```text
+Normalized Events
+       |
+       v
+Replay driver  (verify order, scope, validate, dispatch)
+       |
+       v
+MatchingEngine (crossing detection, price-time priority, fills)
+       |  |
+       |  +----> Execution Results (Fill records, in order)
+       v
+OrderBook      (MBO resting-order state)
+       |
+       v
+Updated Market State
+```
+
+### 9.1 Responsibility split
+
+* **Replay engine:** unchanged from Day 03. Event ordering, validation,
+  dispatch. It dispatches to any `EventProcessor`; it does not know
+  whether the processor matches.
+* **MatchingEngine** (`include/tickforge/matching/`, `src/matching/`,
+  `tickforge_matching` library): implements `EventProcessor`. Decides
+  crossing, selects resting orders by price-time priority, generates
+  fills, rests residuals. It drives the `OrderBook` exclusively through
+  the book's public mutation API (`addRestingOrder`, `removeOrder`,
+  `reduceQuantity`, plus the read queries); it never touches book
+  containers.
+* **OrderBook:** still a state container. Day 04 adds the controlled
+  mutation API above and a `priceLevels()` query; `onEvent` keeps Day 03
+  semantics (a `NewOrder` rests without matching) so the book remains
+  directly testable.
+
+### 9.2 Execution semantics
+
+Derived from SPEC.md sections 1.1, 2.3, 5.4, 5.5, 6, and 7:
+
+* Only `NewOrder` events are aggressors; every `NewOrder` is a limit
+  order. A bid crosses when its price >= best ask; an ask crosses when
+  its price <= best bid. Equality crosses.
+* Execution price is the resting order's price (definitional to
+  price-time priority in a limit order book).
+* Fills are generated best-eligible-price-first, then FIFO
+  (`arrivalSeq`) within a price. An aggressor never consumes beyond its
+  limit price; the first non-crossing level ends the sweep.
+* A partially filled resting order keeps its queue position and
+  `arrivalSeq` with reduced quantity.
+* Unfilled residual quantity rests in the book at the limit price
+  (SPEC.md 7). No IOC/FOK exists; `flags` remain ignored.
+* A `ModifyOrder` that changes price is cancel/replace: the replacement
+  is removed and run as a potential aggressor, matching if it crosses
+  and otherwise resting with the modify event's seq as the new
+  `arrivalSeq`. Quantity-only changes use the book's Day 03 logic.
+* Self-trade by order id cannot happen: a `NewOrder` with a live id is
+  rejected as a duplicate (SPEC.md 5.1). No participant fields exist.
+
+### 9.3 Fill records
+
+`Fill` (`include/tickforge/matching/fill.hpp`) is an execution result,
+not a normalized event (SPEC.md 2.3: trade events do not appear in the
+order flow). Fields: aggressor id, resting id, aggressor side,
+execution price (ticks), quantity (lots, always positive), timestamp
+and sequence from the aggressor event. Multiple fills from one event
+share timestamp/sequence; their deterministic order is the vector
+order. `MatchingEngine::fills()` returns the most recent event's fills;
+the vector is reused across calls.
+
+### 9.4 Failure model
+
+Day 03's "abort, don't rollback" is preserved. Expected domain failures
+(unknown order, duplicate id) return false through the `EventProcessor`
+interface and abort replay with a diagnostic. Internal invariant
+violations (e.g. a level snapshot referencing a missing order) are
+`assert`s: programming errors, not domain failures. A valid event never
+leaves the book half-mutated: matching computes fills against snapshots
+and applies removals/reductions in order, and the residual is rested
+only after the sweep completes.
