@@ -107,6 +107,18 @@ add_library(tickforge_matching STATIC src/matching/matching_engine.cpp)
 target_link_libraries(tickforge_matching PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_book)
 
 # ---------------------------------------------------------------------------
+# Analytics library (Day 05): deterministic queue-position tracking and
+# execution statistics. Public headers live in include/tickforge/analytics/;
+# the implementation in src/analytics/. Passive observers only: they read
+# the OrderBook and Fill records, never mutate state or perform matching.
+# ---------------------------------------------------------------------------
+add_library(tickforge_analytics STATIC
+  src/analytics/queue_tracker.cpp
+  src/analytics/execution_statistics.cpp
+)
+target_link_libraries(tickforge_analytics PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching)
+
+# ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
@@ -142,8 +154,11 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_matching.cpp
     tests/test_matching_properties.cpp
     tests/test_replay_matching_integration.cpp
+    tests/test_queue_tracker.cpp
+    tests/test_execution_statistics.cpp
+    tests/test_analytics_integration.cpp
   )
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching GTest::gtest_main)
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics GTest::gtest_main)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)
