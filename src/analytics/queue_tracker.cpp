@@ -81,8 +81,8 @@ void QueueTracker::onFills(std::span<const Fill> fills) {
   }
 }
 
-std::optional<QueueTracker::QueuePosition>
-QueueTracker::queuePosition(const OrderBook& book, OrderId id) const {
+std::optional<QueueTracker::QueuePosition> QueueTracker::queuePosition(const OrderBook& book,
+                                                                       OrderId id) const {
   if (!isTracked(id)) {
     return std::nullopt;
   }

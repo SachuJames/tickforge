@@ -5,18 +5,18 @@
 // determinism. The tracker observes events and fills; positions are
 // recomputed from the live book.
 
+#include "tickforge/analytics/queue_tracker.hpp"
+#include "tickforge/book/order_book.hpp"
+#include "tickforge/event/event.hpp"
+#include "tickforge/matching/fill.hpp"
+#include "tickforge/matching/matching_engine.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
 
 #include <gtest/gtest.h>
-
-#include "tickforge/analytics/queue_tracker.hpp"
-#include "tickforge/book/order_book.hpp"
-#include "tickforge/event/event.hpp"
-#include "tickforge/matching/fill.hpp"
-#include "tickforge/matching/matching_engine.hpp"
 
 namespace {
 

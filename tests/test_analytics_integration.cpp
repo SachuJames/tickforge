@@ -5,11 +5,6 @@
 // analytical observers. Proves the full pipeline is deterministic and
 // that analytics never perturb matching.
 
-#include <cstdint>
-#include <vector>
-
-#include <gtest/gtest.h>
-
 #include "tickforge/analytics/execution_statistics.hpp"
 #include "tickforge/analytics/queue_tracker.hpp"
 #include "tickforge/book/order_book.hpp"
@@ -17,6 +12,11 @@
 #include "tickforge/matching/fill.hpp"
 #include "tickforge/matching/matching_engine.hpp"
 #include "tickforge/replay/replay.hpp"
+
+#include <cstdint>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 namespace {
 

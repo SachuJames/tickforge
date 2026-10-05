@@ -3,15 +3,15 @@
 // ExecutionStatistics tests: exact integer arithmetic, quantity-weighted
 // averages, min/max, buy/sell splits, conservation, and determinism.
 
+#include "tickforge/analytics/execution_statistics.hpp"
+#include "tickforge/event/event.hpp"
+#include "tickforge/matching/fill.hpp"
+
 #include <cstdint>
 #include <optional>
 #include <vector>
 
 #include <gtest/gtest.h>
-
-#include "tickforge/analytics/execution_statistics.hpp"
-#include "tickforge/event/event.hpp"
-#include "tickforge/matching/fill.hpp"
 
 namespace {
 
