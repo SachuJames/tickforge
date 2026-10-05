@@ -438,3 +438,101 @@ violations (e.g. a level snapshot referencing a missing order) are
 leaves the book half-mutated: matching computes fills against snapshots
 and applies removals/reductions in order, and the residual is rested
 only after the sweep completes.
+
+## 10. Queue tracking and execution statistics (Day 05)
+
+Day 05 adds a deterministic analytical layer on top of matching. It
+observes; it never mutates the book and never influences matching:
+
+```text
+Normalized Events
+       |
+       v
+Replay driver  (verify order, scope, validate, dispatch)
+       |
+       v
+MatchingEngine (crossing detection, price-time priority, fills)
+       |  |
+       |  +----> Execution Results (Fill records, in order)
+       |                |
+       |                v
+       |         ExecutionStatistics (counts, quantities, min/max, avg)
+       v
+OrderBook      (MBO resting-order state)
+       |
+       v
+QueueTracker   (designated-order positions, read-only book queries)
+```
+
+### 10.1 Responsibility split
+
+* **QueueTracker** (`include/tickforge/analytics/queue_tracker.hpp`,
+  `src/analytics/queue_tracker.cpp`): tracks queue positions for
+  *designated* order ids. A designated order is one the caller
+  explicitly registers via `designate()`; tracking is opt-in so the
+  component stays cheap when only a few orders matter. The tracker is
+  fed validated events (`onEvent`) and fills (`onFills`) in stream
+  order, and answers position queries by recomputing from the live book
+  through the public read API (`find`, `ordersAtLevel`, `contains`).
+  It never writes to the book and never performs matching.
+* **ExecutionStatistics**
+  (`include/tickforge/analytics/execution_statistics.hpp`,
+  `src/analytics/execution_statistics.cpp`): consumes `Fill` records
+  via `addFill()`/`addFills()` and maintains aggregate execution
+  metrics. Pure observer; knows nothing about the book or the engine.
+* Both live in the `tickforge_analytics` library. The intended driver
+  flow per event is: `engine.onEvent(e)` then
+  `tracker.onEvent(e)`, `tracker.onFills(engine.fills())`,
+  `stats.addFills(engine.fills())`.
+
+### 10.2 Queue-position semantics
+
+Positions follow SPEC.md 8.1 exactly:
+
+* Within one price level on one side, resting orders form a FIFO queue
+  ordered by `arrivalSeq`. Queue position is the 1-based index in that
+  queue. Quantity ahead is the sum of remaining quantities of all
+  orders earlier in the same level's queue. Order ids never determine
+  priority.
+* Positions are recomputed from the live book on every query, so queue
+  advancement is derived only from actual book events: inserts push
+  later orders back, cancels and executions pull later orders forward,
+  partial fills reduce the ahead quantity by exactly the executed
+  amount. Nothing is estimated or interpolated.
+* Lifecycle for a designated id: `Resting` (in the book), `Filled`
+  (left the book via execution, detected from accumulated fills),
+  `Cancelled` (a `CancelOrder` was observed), `Unknown` (not tracked or
+  never observed). A price-changing `ModifyOrder` (or a quantity
+  increase) is cancel/replace per SPEC.md 5.5: the tracker's
+  fill-accounting resets, mirroring the engine. A same-price quantity
+  decrease keeps history and priority. An id reused after cancellation
+  starts fresh on its `NewOrder`.
+
+### 10.3 Execution statistics
+
+All statistics are exact integer arithmetic; no floating point appears:
+
+* `fillCount()`: number of fills observed.
+* `totalQuantity()`: sum of fill quantities (lots).
+* `buyQuantity()` / `sellQuantity()`: lots where the aggressor side is
+  Bid / Ask.
+* `minPrice()` / `maxPrice()`: extreme execution prices (ticks),
+  empty when no fills observed.
+* `averagePrice()`: the quantity-weighted average as an exact rational
+  `sum(price_ticks * quantity_lots) / sum(quantity_lots)`, empty when
+  no fills observed. The numerator is accumulated in 128 bits (portable
+  hi/lo words, no `__int128`, no `-Wpedantic` issues) because a single
+  int64 price times an int64 quantity can already overflow int64.
+
+Deliberately out of scope: PnL, mark-to-market, strategy metrics,
+latency models, and anything stochastic. The statistics describe what
+executed, nothing more.
+
+### 10.4 Deterministic guarantees
+
+* Given the same event stream fed in the same order, queue positions,
+  lifecycle states, and statistics are bit-identical across runs.
+* Analytics cannot perturb matching: they hold no mutable references
+  into the engine or book, and the integration tests assert that a run
+  with analytics attached produces identical fills and book state to a
+  run without.

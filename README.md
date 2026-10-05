@@ -26,14 +26,15 @@ Day 01 establishes the engineering foundation only:
   `EventType`, and `Event` with `(timestamp, seq)` ordering and explicit
   validation (`tickforge_event` library, tested).
 
-The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), and the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
+The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records), and the deterministic analytics layer (`tickforge_analytics`: designated-order queue-position tracking per SPEC.md section 8, and exact integer execution statistics) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
 
 ## Planned capabilities
 
 * Normalized event model with nanosecond timestamps and logical sequencing (SPEC.md section 2-3).
 * Deterministic event replay with a formal reproducibility guarantee (SPEC.md section 4).
 * Market-by-order book with price-time priority matching (SPEC.md section 5-6).
-* Queue-position tracking: quantity ahead of a simulated order at its price level (SPEC.md section 8).
+* Queue-position tracking for designated orders: rank and quantity ahead at the price level, with lifecycle states (SPEC.md section 8).
+* Exact integer execution statistics over Fill records (counts, quantities, min/max/weighted-average prices).
 * Execution simulator with microstructure models (latency, fees) and statistics/validation.
 * Published reproducibility and latency benchmark with full methodology (BENCHMARKING.md).
 
