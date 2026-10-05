@@ -8,10 +8,9 @@
 #include "tickforge/matching/fill.hpp"
 
 #include <cstdint>
+#include <gtest/gtest.h>
 #include <optional>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 namespace {
 

@@ -71,8 +71,8 @@ public:
     Quantity quantityAhead;     // lots resting ahead in the same level
     Quantity quantityRemaining; // the order's own remaining lots
   };
-  [[nodiscard]] std::optional<QueuePosition> queuePosition(const OrderBook& book,
-                                                           OrderId id) const;
+  [[nodiscard]] std::optional<QueuePosition>
+  queuePosition(const OrderBook& book, OrderId id) const;
 
   // Lifecycle of a designated order id.
   enum class Lifecycle : std::uint8_t {

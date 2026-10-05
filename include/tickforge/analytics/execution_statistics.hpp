@@ -36,11 +36,11 @@ public:
   void addFills(std::span<const Fill> fills);
 
   [[nodiscard]] std::size_t fillCount() const noexcept;
-  [[nodiscard]] Quantity totalQuantity() const noexcept; // lots, all fills
-  [[nodiscard]] Quantity buyQuantity() const noexcept;  // lots, aggressor Bid
-  [[nodiscard]] Quantity sellQuantity() const noexcept; // lots, aggressor Ask
-  [[nodiscard]] std::optional<Price> minPrice() const noexcept; // ticks
-  [[nodiscard]] std::optional<Price> maxPrice() const noexcept; // ticks
+  [[nodiscard]] Quantity totalQuantity() const noexcept;
+  [[nodiscard]] Quantity buyQuantity() const noexcept;
+  [[nodiscard]] Quantity sellQuantity() const noexcept;
+  [[nodiscard]] std::optional<Price> minPrice() const noexcept;
+  [[nodiscard]] std::optional<Price> maxPrice() const noexcept;
 
   // Exact quantity-weighted average execution price:
   //   sum(price_ticks * quantity_lots) / sum(quantity_lots)

@@ -14,9 +14,8 @@
 #include "tickforge/replay/replay.hpp"
 
 #include <cstdint>
-#include <vector>
-
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 
