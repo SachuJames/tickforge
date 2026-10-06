@@ -167,8 +167,9 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_queue_tracker.cpp
     tests/test_execution_statistics.cpp
     tests/test_analytics_integration.cpp
+    tests/test_csv_parser.cpp
   )
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics GTest::gtest_main)
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data GTest::gtest_main)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)
