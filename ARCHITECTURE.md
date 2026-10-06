@@ -536,3 +536,95 @@ executed, nothing more.
   into the engine or book, and the integration tests assert that a run
   with analytics attached produces identical fills and book state to a
   run without.
+
+## 11. Market-data parsing boundary (Day 06)
+
+Day 06 adds the external input boundary. The parser converts one
+documented CSV format into normalized events; it knows nothing about
+the book, matching engine, or analytics:
+
+```text
+CSV Market Data
+       |
+       v
+CsvParser (parse, validate, normalize, assign seq)
+       |
+       v
+Normalized Events (validateEvent gate)
+       |
+       v
+Replay -> MatchingEngine -> OrderBook -> Fills -> Analytics
+```
+
+### 11.1 Supported format
+
+One format only: TickForge CSV. Header required, byte-exact:
+
+```text
+timestamp,event_type,order_id,side,price,quantity
+```
+
+| field      | type    | meaning                                              | required |
+|------------|---------|------------------------------------------------------|----------|
+| timestamp  | int64   | nanoseconds since Unix epoch (signed)                | yes      |
+| event_type | char    | N (NewOrder), M (ModifyOrder), C (CancelOrder)       | yes      |
+| order_id   | uint64  | source-assigned order identity                       | yes      |
+| side       | char    | B (Bid), A (Ask)                                     | yes      |
+| price      | int64   | ticks; NewOrder > 0, Modify >= 0 (0 = unchanged),    | yes*     |
+|            |         | Cancel must be 0/empty                               |          |
+| quantity   | int64   | lots; same rules as price                            | yes*     |
+
+*The field must be present (6 columns); the value may be empty, which
+means 0. No quoting, no embedded commas. Leading/trailing whitespace
+is trimmed.
+
+No other format is supported. No exchange-feed compatibility is claimed.
+
+### 11.2 Conversion semantics
+
+* **Price/quantity**: integer ticks/lots, passed through unchanged. The
+  format carries no decimal prices, so no conversion or rounding exists.
+* **Timestamp**: int64 nanoseconds preserved exactly via the existing
+  `Timestamp` type (`count()`, not `nanos()`).
+* **Sequence**: assigned by the parser in input-file order from 0,
+  dense, no gaps (SPEC.md 3.2). The source does not provide sequences;
+  this assignment is spec-mandated, not invented. Duplicate
+  `(timestamp, seq)` pairs are impossible by construction.
+* **Order ID**: uint64 preserved exactly. The parser does not track
+  order lifecycle; duplicate live IDs are rejected downstream by the
+  matching engine (Day 04), not duplicated in the parser.
+* **Instrument**: parser parameter (SPEC.md 2.2: exactly one per
+  session), not a per-record field.
+* **Flags**: always 0; the parser never sets them.
+
+### 11.3 Validation layers
+
+1. **Syntax**: field count, character validity, `std::from_chars`
+   numeric parsing (locale-independent, exact overflow detection).
+2. **Format**: event_type in {N,M,C}, side in {B,A}.
+3. **Domain**: the constructed event is passed through the existing
+   `validateEvent()` gate. NewOrder requires price>0/qty>0; Modify
+   requires price>=0/qty>=0 with at least one set; Cancel requires
+   price==0/qty==0. These rules are not duplicated in the parser.
+
+A rejected record yields a `ParseError` reason code, line number, and
+diagnostic. `parseStream()` uses strict mode (stops at first error);
+callers needing lenient handling use `parseRecord()` per line and
+collect reasons themselves. Parsers never silently drop records
+(SPEC.md 11).
+
+### 11.4 Deterministic guarantees
+
+* Same bytes in: same events out (types, timestamps, IDs, sides,
+  prices, quantities, sequences).
+* No randomness, no clock, no locale-dependent parsing
+  (`std::from_chars`, byte-wise comparisons only), no floating point.
+* Input record order is preserved; sequences reflect file order.
+
+### 11.5 Component
+
+`tickforge_market_data` static library: `CsvParser` with
+`parseRecord()` (one line + caller-supplied sequence) and
+`parseStream()` (header validation, dense seq from 0). Depends only on
+`tickforge_core` and `tickforge_event`. No coupling to book, matching,
+or analytics; the caller composes the pipeline.
