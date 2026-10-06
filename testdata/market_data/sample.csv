@@ -1,0 +1,7 @@
+timestamp,event_type,order_id,side,price,quantity
+1000000,N,1,B,100,10
+1000010,N,2,B,100,5
+1000020,N,3,A,101,8
+1000030,C,2,B,,
+1000040,M,1,B,99,
+1000050,N,4,A,99,12

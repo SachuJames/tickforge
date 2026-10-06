@@ -119,6 +119,16 @@ add_library(tickforge_analytics STATIC
 target_link_libraries(tickforge_analytics PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching)
 
 # ---------------------------------------------------------------------------
+# Market-data parser library (Day 06): deterministic CSV input boundary.
+# Public headers live in include/tickforge/market_data/; the implementation
+# in src/market_data/. Converts external CSV records into normalized
+# Events with parser-assigned dense sequences. Knows nothing about the
+# book, matching engine, or analytics.
+# ---------------------------------------------------------------------------
+add_library(tickforge_market_data STATIC src/market_data/csv_parser.cpp)
+target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_event)
+
+# ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
