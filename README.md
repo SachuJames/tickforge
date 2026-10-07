@@ -26,7 +26,7 @@ Day 01 establishes the engineering foundation only:
   `EventType`, and `Event` with `(timestamp, seq)` ordering and explicit
   validation (`tickforge_event` library, tested).
 
-The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records), the deterministic analytics layer (`tickforge_analytics`: designated-order queue-position tracking per SPEC.md section 8, and exact integer execution statistics), and the CSV market-data parsing boundary (`tickforge_market_data`: one documented CSV format to normalized events) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
+The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records), the deterministic analytics layer (`tickforge_analytics`: designated-order queue-position tracking per SPEC.md section 8, and exact integer execution statistics), and the CSV market-data parsing boundary (`tickforge_market_data`: one documented CSV format to normalized events, plus deterministic derived market-state views: best bid/ask and level aggregates read from the MBO book) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
 
 ## Planned capabilities
 

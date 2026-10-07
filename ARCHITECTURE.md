@@ -625,6 +625,69 @@ collect reasons themselves. Parsers never silently drop records
 
 `tickforge_market_data` static library: `CsvParser` with
 `parseRecord()` (one line + caller-supplied sequence) and
-`parseStream()` (header validation, dense seq from 0). Depends only on
-`tickforge_core` and `tickforge_event`. No coupling to book, matching,
-or analytics; the caller composes the pipeline.
+`parseStream()` (header validation, dense seq from 0), plus the
+`MarketStateView` derived state view (Day 07). Depends on
+`tickforge_core`, `tickforge_event`, and `tickforge_book` (for the
+view only; the parser itself never touches the book). No coupling to
+matching or analytics; the caller composes the pipeline.
+
+## 12. Derived market-state views (Day 07)
+
+Day 07 implements the smallest state capability the specification
+actually defines. SPEC.md 9.5 says Market State is "the MBO book plus
+derived views (best bid/ask, level aggregates) after each event," and
+SPEC.md section 5 says aggregated (level-2/MBP) views are "derived,
+never primary." The spec defines no snapshots, no L2/L3 feeds, no
+sequence gaps, and no trade reconstruction, so none of those were
+built.
+
+### 12.1 Semantic boundary
+
+Two pipelines exist and must not be confused:
+
+* **Order-event stream** (Days 02-06): `NewOrder`/`ModifyOrder`/
+  `CancelOrder` are instructions. They drive the matching engine,
+  mutate the `OrderBook`, and produce `Fill`s. Order ids, `arrivalSeq`,
+  queue positions, and aggressor identity live here.
+* **Derived market state** (Day 07): a read-only lens over the
+  `OrderBook`. It reports best bid/ask and per-level aggregates in
+  deterministic price order. It creates no orders, assigns no
+  sequences, produces no fills, and mutates nothing.
+
+The direction is strictly book -> aggregates. The view never
+reconstructs order identity from aggregate data: a level showing
+50 lots does not imply any particular set of orders, and a quantity
+decrease does not imply a trade.
+
+### 12.2 State model
+
+`LevelAggregate{price, totalQuantity, orderCount}`: total resting lots
+and resting order count at one price level, computed from the book's
+public read APIs (`priceLevels`, `ordersAtLevel`, `find`). Empty price
+levels do not exist in the book (it erases them), so aggregates are
+never zero-quantity and `level()` returns `std::nullopt` for absent
+levels.
+
+`MarketStateView` holds a `const OrderBook&` and reflects the book at
+query time: no caching, no mutation, no timestamp of its own (the book
+carries none; the caller knows the event time). Levels are returned
+best-first (bids high to low, asks low to high), matching price
+priority.
+
+### 12.3 Determinism and invariants
+
+* Same book state -> identical aggregates, across views and runs.
+* No unordered iteration in observable output; vectors built in the
+  book's best-first price order.
+* No negative quantities (sums of non-negative remaining lots).
+* No duplicate logical levels (one aggregate per price from
+  `priceLevels()`).
+* The view cannot partially mutate: it has no mutation API at all.
+
+### 12.4 Relationship to other components
+
+* **Parser**: none. The view reads the book, not CSV.
+* **Matching engine / OrderBook**: read-only observation via public
+  APIs. The engine never knows the view exists.
+* **Analytics**: independent. `QueueTracker` and `ExecutionStatistics`
+  are untouched; a caller may compose view + analytics freely.
