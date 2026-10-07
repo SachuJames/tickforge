@@ -125,8 +125,11 @@ target_link_libraries(tickforge_analytics PUBLIC tickforge_core tickforge_event 
 # Events with parser-assigned dense sequences. Knows nothing about the
 # book, matching engine, or analytics.
 # ---------------------------------------------------------------------------
-add_library(tickforge_market_data STATIC src/market_data/csv_parser.cpp)
-target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_event)
+add_library(tickforge_market_data STATIC
+  src/market_data/csv_parser.cpp
+  src/market_data/market_state.cpp
+)
+target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_event tickforge_book)
 
 # ---------------------------------------------------------------------------
 # Main executable (Day 01: proves the build works, nothing more)
