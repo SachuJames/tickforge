@@ -9,6 +9,15 @@
 //   3. validating each event via validateEvent() (SPEC.md section 11),
 //   4. dispatching each event to an EventProcessor in order.
 //
+// Error modes (SPEC.md section 11):
+//   * Strict (default): the first invalid event aborts the replay with a
+//     diagnostic naming the event's sequence number and reason.
+//   * Lenient: invalid events are skipped, counted in skippedCount, and
+//     the replay continues. The mode used is recorded in the result.
+//     Stream-level violations (unsorted input, instrument mismatch) still
+//     abort in lenient mode: they are not "invalid events" but broken
+//     stream invariants (SPEC.md 3.3, 2.2).
+//
 // The driver knows nothing about market logic: it never interprets
 // prices, sides, or book structure. It does not copy the event stream.
 //
@@ -41,10 +50,22 @@ enum class ReplayError : std::uint8_t {
 
 [[nodiscard]] std::string_view toString(ReplayError error) noexcept;
 
+// Replay error mode (SPEC.md section 11). Strict is the default;
+// lenient must be explicitly selected by the caller.
+enum class ReplayMode : std::uint8_t { Strict, Lenient };
+
+[[nodiscard]] std::string_view toString(ReplayMode mode) noexcept;
+
 struct ReplayResult {
   ReplayError error = ReplayError::Ok;
   Sequence failedAt; // sequence number of the offending event, if any
   EventValidationError validationReason = EventValidationError::Ok;
+  // Lenient-mode run summary (SPEC.md section 11): how many invalid
+  // events were skipped. Always 0 in strict mode.
+  std::uint64_t skippedCount = 0;
+  // Records which mode produced this result (SPEC.md 11: lenient use
+  // must be recorded in the output).
+  ReplayMode mode = ReplayMode::Strict;
 
   [[nodiscard]] bool ok() const noexcept {
     return error == ReplayError::Ok;
@@ -55,11 +76,17 @@ struct ReplayResult {
 //
 // Requires: events sorted strictly by Event::operator< ((timestamp, seq)),
 // all carrying the same instrument. Both are verified; the first
-// violation aborts the replay with the offending event's sequence number.
-// Each event is validated with validateEvent() before dispatch; a rejected
-// dispatch aborts with UnknownOrder or DuplicateOrder derived from the
-// event type. This is the strict-mode behavior of SPEC.md section 11:
-// the first invalid event aborts the replay with a diagnostic.
-[[nodiscard]] ReplayResult replayEvents(std::span<const Event> events, EventProcessor& processor);
+// violation aborts the replay with the offending event's sequence number,
+// in both modes.
+//
+// In strict mode (default), the first invalid event aborts: a rejected
+// validation yields InvalidEvent, a rejected dispatch yields UnknownOrder
+// or DuplicateOrder derived from the event type.
+//
+// In lenient mode, invalid events are skipped and counted instead of
+// aborting; the replay completes with error == Ok and skippedCount set.
+[[nodiscard]] ReplayResult replayEvents(std::span<const Event> events,
+                                        EventProcessor& processor,
+                                        ReplayMode mode = ReplayMode::Strict);
 
 } // namespace tickforge
