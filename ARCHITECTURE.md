@@ -282,8 +282,23 @@ The first failure aborts the replay with a diagnostic naming the
 offending event's sequence number and the reason (`ReplayError`:
 `UnsortedInput`, `InvalidEvent`, `UnknownOrder`, `DuplicateOrder`,
 `InstrumentMismatch`). This is the strict-mode behavior of SPEC.md
-section 11. Abort means abort, not rollback: already-applied events
-stay applied.
+section 11 (the default). Abort means abort, not rollback:
+already-applied events stay applied.
+
+### 8.1.1 Lenient mode (Day 08)
+
+`replayEvents` takes a `ReplayMode` (`Strict` default, `Lenient` on
+explicit request). In lenient mode, invalid events are skipped and
+counted instead of aborting (SPEC.md section 11): a failed validation
+or a rejected dispatch increments `ReplayResult::skippedCount` and the
+replay continues. The completed result carries `error == Ok`,
+`skippedCount`, and `mode == Lenient`, which is the run summary and
+the record that lenient mode was used.
+
+Stream-level invariants still abort in lenient mode: unsorted input
+and instrument mismatch are not "invalid events" but broken stream
+preconditions (SPEC.md 3.3, 2.2). Skipped events never reach the
+processor, so no partial mutation occurs.
 
 The driver knows nothing about market logic. It never interprets
 prices, sides, or book structure.
