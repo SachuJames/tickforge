@@ -163,6 +163,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_event_validation.cpp
     tests/test_order_book.cpp
     tests/test_replay.cpp
+    tests/test_replay_lenient.cpp
     tests/test_replay_book_integration.cpp
     tests/test_matching.cpp
     tests/test_matching_properties.cpp
