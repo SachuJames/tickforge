@@ -86,7 +86,7 @@ target_link_libraries(tickforge_event PUBLIC tickforge_core)
 # Public headers live in include/tickforge/replay/; the implementation in
 # src/replay/. Knows nothing about market logic.
 # ---------------------------------------------------------------------------
-add_library(tickforge_replay STATIC src/replay/replay.cpp)
+add_library(tickforge_replay STATIC src/replay/replay.cpp src/replay/session_config.cpp)
 target_link_libraries(tickforge_replay PUBLIC tickforge_core tickforge_event)
 
 # ---------------------------------------------------------------------------
@@ -164,6 +164,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_order_book.cpp
     tests/test_replay.cpp
     tests/test_replay_lenient.cpp
+    tests/test_session_config.cpp
     tests/test_replay_book_integration.cpp
     tests/test_matching.cpp
     tests/test_matching_properties.cpp

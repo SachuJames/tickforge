@@ -231,17 +231,17 @@ TEST(ReplayLenientTest, IntegrationWithOrderBook) {
   };
 
   tickforge::OrderBook strict_book;
-  const ReplayResult strict_result = tickforge::replayEvents(events, strict_book);
-  EXPECT_FALSE(strict_result.ok());
-  EXPECT_EQ(strict_result.error, ReplayError::DuplicateOrder);
+  const ReplayResult strictResult = tickforge::replayEvents(events, strict_book);
+  EXPECT_FALSE(strictResult.ok());
+  EXPECT_EQ(strictResult.error, ReplayError::DuplicateOrder);
   EXPECT_EQ(strict_book.orderCount(), 1U);
 
   tickforge::OrderBook lenient_book;
-  const ReplayResult lenient_result =
+  const ReplayResult lenientResult =
       tickforge::replayEvents(events, lenient_book, ReplayMode::Lenient);
-  EXPECT_TRUE(lenient_result.ok());
-  EXPECT_EQ(lenient_result.skippedCount, 1U);
-  EXPECT_EQ(lenient_result.mode, ReplayMode::Lenient);
+  EXPECT_TRUE(lenientResult.ok());
+  EXPECT_EQ(lenientResult.skippedCount, 1U);
+  EXPECT_EQ(lenientResult.mode, ReplayMode::Lenient);
   EXPECT_EQ(lenient_book.orderCount(), 2U);
   EXPECT_TRUE(lenient_book.contains(OrderId{1}));
   EXPECT_TRUE(lenient_book.contains(OrderId{2}));
