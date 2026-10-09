@@ -706,3 +706,93 @@ priority.
   APIs. The engine never knows the view exists.
 * **Analytics**: independent. `QueueTracker` and `ExecutionStatistics`
   are untouched; a caller may compose view + analytics freely.
+
+## 13. Session configuration (Day 09)
+
+Day 09 implements SPEC.md section 10 (session configuration) and the
+SPEC.md 9.6 requirement that results embed the TickForge version and
+the configuration hash.
+
+### 13.1 Contract
+
+`SessionConfig` (`include/tickforge/replay/session_config.hpp`) is a
+plain value type describing one simulation run. Fields and their
+specification provenance:
+
+* `instrument` (required, non-empty): the session's instrument
+  (SPEC.md 2.2, 10).
+* `tickSize`, `lotSize` (optional decimal strings, e.g. `"0.01"`):
+  per-instrument declarations (SPEC.md 2.4, 10). Absent means "not
+  declared". Validated as decimal text; never parsed to floating
+  point (SPEC.md 2.4 forbids float in the core).
+* `matchingRule` (default `PriceTimePriority`): the selection SPEC.md
+  6 requires so future rules are explicit. Only price-time priority
+  exists today.
+* `prngSeed` (optional): present only when a model needs randomness
+  (SPEC.md 4.3). TickForge has no stochastic models.
+* `mode` (default `Strict`): the SPEC.md 11 error mode.
+
+Microstructure model parameters are intentionally absent: TickForge
+implements no microstructure models, so there is no schema to
+configure. They join the contract when such a model does.
+
+`validateConfig()` rejects invalid configurations before any
+processing. Equality is field-wise; absent optionals differ from
+present ones. The *effective* configuration is the validated config
+with documented defaults applied; the hash is computed over it, so
+equivalent user inputs hash identically.
+
+### 13.2 Serialization
+
+SPEC.md 10 requires serializability but names no format. TickForge
+uses a minimal canonical text format (this is the file format;
+writing the string to a file is the serialization):
+
+```text
+tickforge-config/1
+instrument=AAPL
+lot-size=1
+matching-rule=price-time-priority
+mode=strict
+tick-size=0.01
+```
+
+Rules: first line is the schema identifier plus version; remaining
+lines are `key=value` with keys in byte-wise sorted order
+(`instrument`, `lot-size`, `matching-rule`, `mode`, `prng-seed`,
+`tick-size`); absent optionals are omitted; lines end with LF;
+locale-independent; integers exact. `deserializeConfig()` parses this
+format strictly: bad schema version, malformed lines, duplicate or
+unknown fields, missing required fields, and invalid values are all
+rejected, and the parsed config is validated before return, so
+`deserialize(serialize(c)) == c` for every valid `c`.
+
+### 13.3 Hashing
+
+`hashConfig()` computes FNV-1a 64-bit over the canonical
+serialization bytes. SPEC.md names no algorithm; FNV-1a was chosen
+because the hash is for reproducibility and identity, not security:
+it is simple, dependency-free, and deterministic across processes
+and platforms. `formatConfigHash()` renders it as 16 lowercase hex
+characters. The hash is never treated as collision-free identity.
+
+### 13.4 Replay integration and result metadata
+
+`replayEvents(events, processor, config)` is a new overload; the
+existing overloads are unchanged. It validates the configuration
+first (invalid config yields `ReplayError::InvalidConfig` and the
+processor observes nothing), checks the config's instrument against
+the stream, replays with `config.mode`, and attaches metadata:
+`ReplayResult::version` (always `tickforge::kVersion`) and
+`ReplayResult::configHash` (the FNV-1a hash). `configHash` is
+`std::nullopt` for replays run without a configuration. Metadata
+does not alter matching: configured and plain replays produce
+identical fills and book state.
+
+### 13.5 Non-responsibilities
+
+* No microstructure models, no PRNG consumption, no additional
+  matching rules.
+* No file I/O: serialization is to and from strings; the caller owns
+  files.
+* No global or mutable configuration state.
