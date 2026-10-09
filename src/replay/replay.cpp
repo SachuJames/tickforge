@@ -28,6 +28,8 @@ std::string_view toString(ReplayError error) noexcept {
     return "DuplicateOrder";
   case ReplayError::InstrumentMismatch:
     return "InstrumentMismatch";
+  case ReplayError::InvalidConfig:
+    return "InvalidConfig";
   }
   return "Unknown";
 }
@@ -99,6 +101,36 @@ replayEvents(std::span<const Event> events, EventProcessor& processor, ReplayMod
     }
   }
 
+  return result;
+}
+
+ReplayResult replayEvents(std::span<const Event> events,
+                          EventProcessor& processor,
+                          const SessionConfig& config) {
+  // 1. Configuration gate: invalid configuration fails before the
+  //    processor observes anything (SPEC.md section 10).
+  if (validateConfig(config) != ConfigError::Ok) {
+    ReplayResult result;
+    result.error = ReplayError::InvalidConfig;
+    result.mode = config.mode;
+    return result;
+  }
+
+  // 2. Session scoping: the configuration declares the session's
+  //    instrument; the event stream must carry it (SPEC.md 2.2).
+  if (!events.empty() && events.front().instrument != config.instrument) {
+    ReplayResult result;
+    result.error = ReplayError::InstrumentMismatch;
+    result.failedAt = events.front().sequence;
+    result.mode = config.mode;
+    return result;
+  }
+
+  // 3. Replay with the configured mode, then attach result metadata
+  //    (SPEC.md 9.6): the version and the configuration hash identify
+  //    exactly what produced this result.
+  ReplayResult result = replayEvents(events, processor, config.mode);
+  result.configHash = hashConfig(config);
   return result;
 }
 

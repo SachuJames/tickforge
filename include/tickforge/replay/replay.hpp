@@ -32,8 +32,12 @@
 
 #include "tickforge/event/event.hpp"
 #include "tickforge/replay/event_processor.hpp"
+#include "tickforge/replay/replay_mode.hpp"
+#include "tickforge/replay/session_config.hpp"
+#include "tickforge/version.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -46,15 +50,15 @@ enum class ReplayError : std::uint8_t {
   UnknownOrder,       // cancel/modify referenced a non-resting order
   DuplicateOrder,     // new order reused a live order id
   InstrumentMismatch, // more than one instrument in the stream
+  InvalidConfig,      // the session configuration failed validation
 };
 
 [[nodiscard]] std::string_view toString(ReplayError error) noexcept;
 
 // Replay error mode (SPEC.md section 11). Strict is the default;
-// lenient must be explicitly selected by the caller.
-enum class ReplayMode : std::uint8_t { Strict, Lenient };
-
-[[nodiscard]] std::string_view toString(ReplayMode mode) noexcept;
+// lenient must be explicitly selected by the caller. Declared in
+// replay_mode.hpp so session_config.hpp can name it without including
+// this header.
 
 struct ReplayResult {
   ReplayError error = ReplayError::Ok;
@@ -66,6 +70,12 @@ struct ReplayResult {
   // Records which mode produced this result (SPEC.md 11: lenient use
   // must be recorded in the output).
   ReplayMode mode = ReplayMode::Strict;
+  // Result metadata (SPEC.md 9.6): the TickForge version and the hash
+  // of the effective session configuration. configHash is set only when
+  // the replay ran with an explicit SessionConfig; otherwise the run
+  // had no configuration to identify.
+  std::string_view version = kVersion;
+  std::optional<std::uint64_t> configHash;
 
   [[nodiscard]] bool ok() const noexcept {
     return error == ReplayError::Ok;
@@ -88,5 +98,16 @@ struct ReplayResult {
 [[nodiscard]] ReplayResult replayEvents(std::span<const Event> events,
                                         EventProcessor& processor,
                                         ReplayMode mode = ReplayMode::Strict);
+
+// Configured replay (SPEC.md sections 9.6 and 10).
+//
+// Validates the configuration before touching the processor: an invalid
+// configuration yields ReplayError::InvalidConfig and the processor
+// observes nothing. The configuration's instrument must match the
+// event stream's instrument (InstrumentMismatch otherwise). The replay
+// runs with config.mode, and the result embeds the TickForge version
+// and the configuration hash (SPEC.md 9.6).
+[[nodiscard]] ReplayResult
+replayEvents(std::span<const Event> events, EventProcessor& processor, const SessionConfig& config);
 
 } // namespace tickforge
