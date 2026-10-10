@@ -36,8 +36,6 @@ struct ReplayOutcome {
 ReplayOutcome runReplay(const std::vector<Event>& events, ReplayMode mode) {
   OrderBook book;
   MatchingEngine engine(book);
-  QueueTracker tracker;
-  ExecutionStatistics stats;
   ReplayOutcome outcome;
   outcome.result = replayEvents(events, engine, mode);
   outcome.fills = engine.fills();
@@ -46,8 +44,6 @@ ReplayOutcome runReplay(const std::vector<Event>& events, ReplayMode mode) {
   outcome.orderCount = book.orderCount();
   outcome.bestBid = book.bestBid();
   outcome.bestAsk = book.bestAsk();
-  (void)tracker;
-  (void)stats;
   return outcome;
 }
 
@@ -60,8 +56,9 @@ std::string describeOutcome(const ReplayOutcome& o) {
 
 // Strict replay of a generated valid sequence is deterministic: two
 // fresh runs agree on result metadata and final book state.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): test with many assertions.
 TEST(ReplayProperty, StrictDeterminism) {
-  for (const std::uint64_t seed : {1, 2, 3, 42, 7, 99}) {
+  for (const std::uint64_t seed : {1ULL, 2ULL, 3ULL, 42ULL, 7ULL, 99ULL}) {
     GeneratorConfig config;
     config.seed = seed;
     config.eventCount = 80;
@@ -76,6 +73,7 @@ TEST(ReplayProperty, StrictDeterminism) {
   }
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Event makeInvalidCancel(std::uint64_t id, std::size_t seq, std::int64_t ts) {
   Event e;
   e.type = EventType::CancelOrder;
@@ -86,6 +84,7 @@ Event makeInvalidCancel(std::uint64_t id, std::size_t seq, std::int64_t ts) {
   return e;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Event makeZeroQuantityNew(std::uint64_t id, std::size_t seq, std::int64_t ts) {
   Event e;
   e.type = EventType::NewOrder;
@@ -101,6 +100,7 @@ Event makeZeroQuantityNew(std::uint64_t id, std::size_t seq, std::int64_t ts) {
 
 // Lenient mode skips invalid events, counts them, and still processes
 // the valid events around them.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): test with many assertions.
 TEST(ReplayProperty, LenientSkipsAndCounts) {
   GeneratorConfig config;
   config.seed = 5;
@@ -110,13 +110,13 @@ TEST(ReplayProperty, LenientSkipsAndCounts) {
   // Splice invalid events at deterministic positions. They need valid
   // timestamps/seqs to keep the stream ordered; use gaps between neighbors.
   std::vector<Event> mixed;
-  std::size_t invalidCount = 0;
+  std::size_t invalid_count = 0;
   for (std::size_t i = 0; i < events.size(); ++i) {
     mixed.push_back(events[i]);
     if (i % 10 == 9) {
       const std::int64_t ts = events[i].timestamp.count() + 1;
-      mixed.push_back(makeInvalidCancel(9000 + invalidCount, 0, ts));
-      ++invalidCount;
+      mixed.push_back(makeInvalidCancel(9000 + invalid_count, 0, ts));
+      ++invalid_count;
     }
   }
   // Reassign dense seqs and strictly increasing timestamps.
@@ -130,25 +130,26 @@ TEST(ReplayProperty, LenientSkipsAndCounts) {
   const auto result = replayEvents(mixed, engine, ReplayMode::Lenient);
   EXPECT_TRUE(result.ok());
   EXPECT_EQ(result.mode, ReplayMode::Lenient);
-  EXPECT_EQ(result.skippedCount, invalidCount);
+  EXPECT_EQ(result.skippedCount, invalid_count);
 
   // The valid events were all processed: compare against replaying the
   // valid subsequence alone in strict mode.
-  std::vector<Event> validOnly;
+  std::vector<Event> valid_only;
+  valid_only.reserve(events.size());
   for (const auto& e : events) {
-    validOnly.push_back(e);
+    valid_only.push_back(e);
   }
-  for (std::size_t i = 0; i < validOnly.size(); ++i) {
-    validOnly[i].sequence = Sequence{i};
-    validOnly[i].timestamp = Timestamp{2'000'000 + static_cast<std::int64_t>(i) * 2};
+  for (std::size_t i = 0; i < valid_only.size(); ++i) {
+    valid_only[i].sequence = Sequence{i};
+    valid_only[i].timestamp = Timestamp{2'000'000 + static_cast<std::int64_t>(i) * 2};
   }
-  OrderBook refBook;
-  MatchingEngine refEngine(refBook);
-  const auto refResult = replayEvents(validOnly, refEngine, ReplayMode::Strict);
+  OrderBook ref_book;
+  MatchingEngine ref_engine(ref_book);
+  const auto refResult = replayEvents(valid_only, ref_engine, ReplayMode::Strict);
   EXPECT_TRUE(refResult.ok());
-  EXPECT_EQ(book.orderCount(), refBook.orderCount());
-  EXPECT_EQ(book.bestBid(), refBook.bestBid());
-  EXPECT_EQ(book.bestAsk(), refBook.bestAsk());
+  EXPECT_EQ(book.orderCount(), ref_book.orderCount());
+  EXPECT_EQ(book.bestBid(), ref_book.bestBid());
+  EXPECT_EQ(book.bestAsk(), ref_book.bestAsk());
 }
 
 // Strict mode aborts on the first invalid event with the documented error.
@@ -158,7 +159,7 @@ TEST(ReplayProperty, StrictAbortsOnInvalid) {
   config.eventCount = 20;
   auto events = EventGenerator(config).generate();
   // Append an unknown cancel after the valid prefix.
-  Event bad = makeInvalidCancel(9999, events.size(), 3'000'000);
+  const Event bad = makeInvalidCancel(9999, events.size(), 3'000'000);
   events.push_back(bad);
 
   OrderBook book;
@@ -176,7 +177,7 @@ TEST(ReplayProperty, InvalidQuantityHandling) {
   config.seed = 7;
   config.eventCount = 10;
   auto events = EventGenerator(config).generate();
-  Event bad = makeZeroQuantityNew(8888, events.size(), 3'000'000);
+  const Event bad = makeZeroQuantityNew(8888, events.size(), 3'000'000);
   events.push_back(bad);
 
   {
@@ -191,7 +192,7 @@ TEST(ReplayProperty, InvalidQuantityHandling) {
     MatchingEngine engine(book);
     const auto r = replayEvents(events, engine, ReplayMode::Lenient);
     EXPECT_TRUE(r.ok());
-    EXPECT_EQ(r.skippedCount, 1u);
+    EXPECT_EQ(r.skippedCount, 1U);
   }
 }
 

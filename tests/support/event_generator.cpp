@@ -5,6 +5,7 @@
 
 #include "tests/support/event_generator.hpp"
 
+#include <algorithm>
 #include <sstream>
 
 namespace tickforge::test {

@@ -46,6 +46,57 @@ std::string compareFills(const Fill& prod, const Fill& ref, std::size_t fillInde
   return out.str();
 }
 
+// Compares one price level's FIFO queue and order fields.
+void compareLevel(const OrderBook& prod,
+                  const ReferenceBook& ref,
+                  Side side,
+                  Price price,
+                  std::ostringstream& out) {
+  const auto prodIds = prod.ordersAtLevel(side, price);
+  const auto refIds = ref.ordersAtLevel(side, price);
+  if (prodIds.size() != refIds.size()) {
+    out << " level " << price.ticks() << " order count differs";
+    return;
+  }
+  for (std::size_t j = 0; j < prodIds.size(); ++j) {
+    if (prodIds[j] != refIds[j]) {
+      out << " FIFO order differs at level " << price.ticks();
+      break;
+    }
+    const auto p = prod.find(prodIds[j]);
+    const auto r = ref.find(refIds[j]);
+    if (!p.has_value() || !r.has_value()) {
+      out << " find() missing for id " << prodIds[j].value();
+      continue;
+    }
+    if (p->side != r->side || p->price != r->price || p->quantity != r->quantity ||
+        p->arrivalSeq != r->arrivalSeq) {
+      out << " order " << prodIds[j].value() << " fields differ";
+    }
+  }
+}
+
+// Compares all price levels on one side.
+void compareSide(const OrderBook& prod,
+                 const ReferenceBook& ref,
+                 Side side,
+                 std::ostringstream& out) {
+  const auto prodLevels = prod.priceLevels(side);
+  const auto refLevels = ref.priceLevels(side);
+  if (prodLevels.size() != refLevels.size()) {
+    out << " levelCount side=" << (side == Side::Bid ? "Bid" : "Ask")
+        << " prod=" << prodLevels.size() << " ref=" << refLevels.size();
+    return;
+  }
+  for (std::size_t i = 0; i < prodLevels.size(); ++i) {
+    if (prodLevels[i] != refLevels[i]) {
+      out << " level[" << i << "] price differs";
+      continue;
+    }
+    compareLevel(prod, ref, side, prodLevels[i], out);
+  }
+}
+
 // Compares full observable book state. Returns empty on match.
 std::string compareBooks(const OrderBook& prod, const ReferenceBook& ref) {
   std::ostringstream out;
@@ -58,43 +109,8 @@ std::string compareBooks(const OrderBook& prod, const ReferenceBook& ref) {
   if (prod.bestAsk() != ref.bestAsk()) {
     out << " bestAsk differs";
   }
-  for (const Side side : {Side::Bid, Side::Ask}) {
-    const auto prodLevels = prod.priceLevels(side);
-    const auto refLevels = ref.priceLevels(side);
-    if (prodLevels.size() != refLevels.size()) {
-      out << " levelCount side=" << (side == Side::Bid ? "Bid" : "Ask")
-          << " prod=" << prodLevels.size() << " ref=" << refLevels.size();
-      continue;
-    }
-    for (std::size_t i = 0; i < prodLevels.size(); ++i) {
-      if (prodLevels[i] != refLevels[i]) {
-        out << " level[" << i << "] price differs";
-        continue;
-      }
-      const auto prodIds = prod.ordersAtLevel(side, prodLevels[i]);
-      const auto refIds = ref.ordersAtLevel(side, refLevels[i]);
-      if (prodIds.size() != refIds.size()) {
-        out << " level " << prodLevels[i].ticks() << " order count differs";
-        continue;
-      }
-      for (std::size_t j = 0; j < prodIds.size(); ++j) {
-        if (prodIds[j] != refIds[j]) {
-          out << " FIFO order differs at level " << prodLevels[i].ticks();
-          break;
-        }
-        const auto p = prod.find(prodIds[j]);
-        const auto r = ref.find(refIds[j]);
-        if (!p.has_value() || !r.has_value()) {
-          out << " find() missing for id " << prodIds[j].value();
-          continue;
-        }
-        if (p->side != r->side || p->price != r->price || p->quantity != r->quantity ||
-            p->arrivalSeq != r->arrivalSeq) {
-          out << " order " << prodIds[j].value() << " fields differ";
-        }
-      }
-    }
-  }
+  compareSide(prod, ref, Side::Bid, out);
+  compareSide(prod, ref, Side::Ask, out);
   return out.str();
 }
 

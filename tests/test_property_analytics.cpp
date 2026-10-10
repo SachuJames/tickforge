@@ -3,15 +3,6 @@
 // Property tests for QueueTracker and ExecutionStatistics, cross-checked
 // against independently computed expectations over generated event
 // sequences.
-//
-// QueueTracker: every designated resting order's queuePosition (rank,
-// quantityAhead, quantityRemaining) is compared against values computed
-// from the independent ReferenceBook. Lifecycle is checked as Resting
-// iff the order rests in the reference book.
-//
-// ExecutionStatistics: expected values are computed from the captured
-// fills with independent portable 128-bit arithmetic (no production
-// VWAP helper). The exact VWAP rational is compared, not a float.
 
 #include "tests/support/event_generator.hpp"
 #include "tests/support/reference_model.hpp"
@@ -46,7 +37,8 @@ struct Uint128 {
   }
 
   // Adds a * b (both 64-bit) without overflow.
-  void addProduct(std::uint64_t a, std::uint64_t b) {
+  void addProduct(std::uint64_t a, // NOLINT(bugprone-easily-swappable-parameters)
+                  std::uint64_t b) {
     const std::uint64_t aLo = a & 0xFFFFFFFFULL;
     const std::uint64_t aHi = a >> 32;
     const std::uint64_t bLo = b & 0xFFFFFFFFULL;
@@ -55,9 +47,8 @@ struct Uint128 {
     const std::uint64_t p1 = aLo * bHi;
     const std::uint64_t p2 = aHi * bLo;
     const std::uint64_t p3 = aHi * bHi;
-    // p0 contributes to lo; p1/p2 shifted by 32; p3 shifted by 64.
     const std::uint64_t mid = p1 + p2;
-    const std::uint64_t midCarry = (mid < p1) ? 1ULL : 0ULL; // overflow of p1+p2
+    const std::uint64_t midCarry = (mid < p1) ? 1ULL : 0ULL;
     add(p0);
     add((mid & 0xFFFFFFFFULL) << 32);
     hi += (mid >> 32) + (midCarry << 32) + p3;
@@ -68,6 +59,131 @@ struct Uint128 {
   }
 };
 
+void checkOnePosition(const QueueTracker& tracker,
+                      const OrderBook& book,
+                      const ReferenceBook& ref,
+                      OrderId id,
+                      std::size_t rank, // NOLINT(bugprone-easily-swappable-parameters)
+                      std::int64_t quantityAhead,
+                      std::size_t eventIdx,
+                      std::ostringstream& problems) {
+  const auto refOrder = ref.find(id);
+  const auto pos = tracker.queuePosition(book, id);
+  if (!pos.has_value() || !refOrder.has_value()) {
+    problems << " eventIdx=" << eventIdx << " id=" << id.value() << " missing state";
+    return;
+  }
+  if (pos->rank != rank + 1) {
+    problems << " eventIdx=" << eventIdx << " id=" << id.value() << " rank prod=" << pos->rank
+             << " ref=" << (rank + 1);
+  }
+  if (pos->quantityAhead.lots() != quantityAhead) {
+    problems << " eventIdx=" << eventIdx << " id=" << id.value()
+             << " qtyAhead prod=" << pos->quantityAhead.lots() << " ref=" << quantityAhead;
+  }
+  if (pos->quantityRemaining != refOrder->quantity) {
+    problems << " eventIdx=" << eventIdx << " id=" << id.value() << " qtyRemaining differs";
+  }
+  if (tracker.lifecycle(book, id) != QueueTracker::Lifecycle::Resting) {
+    problems << " eventIdx=" << eventIdx << " id=" << id.value() << " lifecycle not Resting";
+  }
+}
+
+void checkTrackerState(const QueueTracker& tracker,
+                       const OrderBook& book,
+                       const ReferenceBook& ref,
+                       std::size_t eventIdx,
+                       std::ostringstream& problems) {
+  for (const Side side : {Side::Bid, Side::Ask}) {
+    for (const Price price : ref.priceLevels(side)) {
+      const auto ids = ref.ordersAtLevel(side, price);
+      std::int64_t ahead = 0;
+      for (std::size_t rank = 0; rank < ids.size(); ++rank) {
+        checkOnePosition(tracker, book, ref, ids[rank], rank, ahead, eventIdx, problems);
+        const auto refOrder = ref.find(ids[rank]);
+        if (refOrder.has_value()) {
+          ahead += refOrder->quantity.lots();
+        }
+      }
+    }
+  }
+}
+
+struct ExpectedStats {
+  std::size_t fillCount = 0;
+  std::int64_t totalQty = 0;
+  std::int64_t buyQty = 0;
+  std::int64_t sellQty = 0;
+  std::optional<std::int64_t> minPrice;
+  std::optional<std::int64_t> maxPrice;
+  Uint128 priceQtySum;
+};
+
+ExpectedStats computeExpected(const std::vector<Fill>& fills) {
+  ExpectedStats expected;
+  expected.fillCount = fills.size();
+  for (const auto& f : fills) {
+    expected.totalQty += f.quantity.lots();
+    if (f.side == Side::Bid) {
+      expected.buyQty += f.quantity.lots();
+    } else {
+      expected.sellQty += f.quantity.lots();
+    }
+    if (!expected.minPrice.has_value() || f.price.ticks() < *expected.minPrice) {
+      expected.minPrice = f.price.ticks();
+    }
+    if (!expected.maxPrice.has_value() || f.price.ticks() > *expected.maxPrice) {
+      expected.maxPrice = f.price.ticks();
+    }
+    expected.priceQtySum.addProduct(static_cast<std::uint64_t>(f.price.ticks()),
+                                    static_cast<std::uint64_t>(f.quantity.lots()));
+  }
+  return expected;
+}
+
+void checkStatistics(const ExecutionStatistics& stats,
+                     const ExpectedStats& expected,
+                     std::ostringstream& problems) {
+  if (stats.fillCount() != expected.fillCount) {
+    problems << " fillCount prod=" << stats.fillCount() << " ref=" << expected.fillCount;
+  }
+  if (stats.totalQuantity().lots() != expected.totalQty) {
+    problems << " totalQty prod=" << stats.totalQuantity().lots() << " ref=" << expected.totalQty;
+  }
+  if (stats.buyQuantity().lots() != expected.buyQty ||
+      stats.sellQuantity().lots() != expected.sellQty) {
+    problems << " buy/sell qty differ";
+  }
+  if (expected.fillCount == 0) {
+    if (stats.minPrice().has_value() || stats.maxPrice().has_value() ||
+        stats.averagePrice().has_value()) {
+      problems << " empty stats should have no min/max/vwap";
+    }
+    return;
+  }
+  const auto statsMin = stats.minPrice();
+  const auto statsMax = stats.maxPrice();
+  const bool minOk = statsMin.has_value() && expected.minPrice.has_value() &&
+                     statsMin->ticks() == expected.minPrice.value();
+  if (!minOk) {
+    problems << " minPrice differs";
+  }
+  const bool maxOk = statsMax.has_value() && expected.maxPrice.has_value() &&
+                     statsMax->ticks() == expected.maxPrice.value();
+  if (!maxOk) {
+    problems << " maxPrice differs";
+  }
+  const auto vwap = stats.averagePrice();
+  if (!vwap.has_value()) {
+    problems << " vwap missing";
+  } else if (vwap->priceQuantitySumLo != expected.priceQtySum.lo ||
+             vwap->priceQuantitySumHi != expected.priceQtySum.hi) {
+    problems << " vwap rational differs";
+  }
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): test driver
+// with many assertions; splitting would hurt readability.
 std::string runAnalyticsProperties(const GeneratorConfig& config) {
   OrderBook book;
   MatchingEngine engine(book);
@@ -76,121 +192,35 @@ std::string runAnalyticsProperties(const GeneratorConfig& config) {
   ExecutionStatistics stats;
 
   const auto events = EventGenerator(config).generate();
-  // Designate every order id that will appear.
   for (const auto& e : events) {
     if (e.type == EventType::NewOrder) {
       tracker.designate(e.orderId);
     }
   }
 
-  std::vector<Fill> allFills;
+  std::vector<Fill> all_fills;
   std::ostringstream problems;
 
   for (std::size_t i = 0; i < events.size(); ++i) {
     const Event& event = events[i];
     engine.onEvent(event);
     const std::vector<Fill> fills = engine.fills();
-    const auto refResult = ref.apply(event);
+    ref.apply(event);
 
     tracker.onEvent(event);
     tracker.onFills(fills);
     for (const auto& f : fills) {
       stats.addFill(f);
-      allFills.push_back(f);
+      all_fills.push_back(f);
     }
 
-    // QueueTracker vs independent reference computation.
-    for (const Side side : {Side::Bid, Side::Ask}) {
-      for (const Price price : ref.priceLevels(side)) {
-        const auto ids = ref.ordersAtLevel(side, price);
-        std::int64_t ahead = 0;
-        for (std::size_t rank = 0; rank < ids.size(); ++rank) {
-          const auto refOrder = ref.find(ids[rank]);
-          const auto pos = tracker.queuePosition(book, ids[rank]);
-          if (!pos.has_value()) {
-            problems << " eventIdx=" << i << " id=" << ids[rank].value()
-                     << " missing queuePosition";
-          } else {
-            if (pos->rank != rank + 1) {
-              problems << " eventIdx=" << i << " id=" << ids[rank].value()
-                       << " rank prod=" << pos->rank << " ref=" << (rank + 1);
-            }
-            if (pos->quantityAhead.lots() != ahead) {
-              problems << " eventIdx=" << i << " id=" << ids[rank].value()
-                       << " qtyAhead prod=" << pos->quantityAhead.lots() << " ref=" << ahead;
-            }
-            if (pos->quantityRemaining != refOrder->quantity) {
-              problems << " eventIdx=" << i << " id=" << ids[rank].value()
-                       << " qtyRemaining differs";
-            }
-            if (pos->side != side || pos->price != price) {
-              problems << " eventIdx=" << i << " id=" << ids[rank].value() << " side/price differ";
-            }
-          }
-          ahead += refOrder->quantity.lots();
-          // Lifecycle: resting iff in the reference book.
-          const auto lc = tracker.lifecycle(book, ids[rank]);
-          if (lc != QueueTracker::Lifecycle::Resting) {
-            problems << " eventIdx=" << i << " id=" << ids[rank].value()
-                     << " lifecycle not Resting";
-          }
-        }
-      }
-    }
+    checkTrackerState(tracker, book, ref, i, problems);
     if (!problems.str().empty()) {
       break;
     }
   }
 
-  // ExecutionStatistics vs independent computation from captured fills.
-  std::int64_t totalQty = 0, buyQty = 0, sellQty = 0;
-  std::optional<std::int64_t> minP, maxP;
-  Uint128 pqSum;
-  for (const auto& f : allFills) {
-    totalQty += f.quantity.lots();
-    if (f.side == Side::Bid) {
-      buyQty += f.quantity.lots();
-    } else {
-      sellQty += f.quantity.lots();
-    }
-    if (!minP.has_value() || f.price.ticks() < *minP) {
-      minP = f.price.ticks();
-    }
-    if (!maxP.has_value() || f.price.ticks() > *maxP) {
-      maxP = f.price.ticks();
-    }
-    pqSum.addProduct(static_cast<std::uint64_t>(f.price.ticks()),
-                     static_cast<std::uint64_t>(f.quantity.lots()));
-  }
-
-  if (stats.fillCount() != allFills.size()) {
-    problems << " fillCount prod=" << stats.fillCount() << " ref=" << allFills.size();
-  }
-  if (stats.totalQuantity().lots() != totalQty) {
-    problems << " totalQty prod=" << stats.totalQuantity().lots() << " ref=" << totalQty;
-  }
-  if (stats.buyQuantity().lots() != buyQty || stats.sellQuantity().lots() != sellQty) {
-    problems << " buy/sell qty differ";
-  }
-  if (allFills.empty()) {
-    if (stats.minPrice().has_value() || stats.maxPrice().has_value() ||
-        stats.averagePrice().has_value()) {
-      problems << " empty stats should have no min/max/vwap";
-    }
-  } else {
-    if (!stats.minPrice().has_value() || stats.minPrice()->ticks() != *minP) {
-      problems << " minPrice differs";
-    }
-    if (!stats.maxPrice().has_value() || stats.maxPrice()->ticks() != *maxP) {
-      problems << " maxPrice differs";
-    }
-    const auto vwap = stats.averagePrice();
-    if (!vwap.has_value()) {
-      problems << " vwap missing";
-    } else if (vwap->priceQuantitySumLo != pqSum.lo || vwap->priceQuantitySumHi != pqSum.hi) {
-      problems << " vwap rational differs";
-    }
-  }
+  checkStatistics(stats, computeExpected(all_fills), problems);
 
   if (!problems.str().empty()) {
     std::ostringstream report;
@@ -204,7 +234,7 @@ std::string runAnalyticsProperties(const GeneratorConfig& config) {
 }
 
 TEST(AnalyticsProperty, TrackerAndStatistics) {
-  for (const std::uint64_t seed : {1, 2, 3, 42, 7, 99}) {
+  for (const std::uint64_t seed : {1ULL, 2ULL, 3ULL, 42ULL, 7ULL, 99ULL}) {
     GeneratorConfig config;
     config.seed = seed;
     config.eventCount = 100;

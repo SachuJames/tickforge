@@ -13,6 +13,7 @@
 namespace tickforge::test {
 namespace {
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Event makeNew(std::uint64_t id, Side side, std::int64_t price, std::int64_t qty, std::size_t seq) {
   Event e;
   e.type = EventType::NewOrder;
@@ -26,6 +27,7 @@ Event makeNew(std::uint64_t id, Side side, std::int64_t price, std::int64_t qty,
   return e;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Event makeCancel(std::uint64_t id, std::size_t seq) {
   Event e;
   e.type = EventType::CancelOrder;
@@ -36,6 +38,7 @@ Event makeCancel(std::uint64_t id, std::size_t seq) {
   return e;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 Event makeModify(std::uint64_t id, std::int64_t price, std::int64_t qty, std::size_t seq) {
   Event e;
   e.type = EventType::ModifyOrder;
@@ -57,7 +60,7 @@ TEST(ReferenceModel, CrossingSellPartiallyFills) {
 
   auto r2 = book.apply(makeNew(2, Side::Ask, 100, 4, 1));
   EXPECT_TRUE(r2.applied);
-  ASSERT_EQ(r2.fills.size(), 1u);
+  ASSERT_EQ(r2.fills.size(), 1U);
   EXPECT_EQ(r2.fills[0].aggressorId, OrderId{2});
   EXPECT_EQ(r2.fills[0].restingId, OrderId{1});
   EXPECT_EQ(r2.fills[0].side, Side::Ask);
@@ -66,6 +69,7 @@ TEST(ReferenceModel, CrossingSellPartiallyFills) {
 
   const auto remaining = book.find(OrderId{1});
   ASSERT_TRUE(remaining.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(remaining->quantity, Quantity{6});
   EXPECT_FALSE(book.find(OrderId{2}).has_value()); // fully filled, not resting
 }
@@ -76,11 +80,12 @@ TEST(ReferenceModel, FifoAtSamePrice) {
   book.apply(makeNew(1, Side::Bid, 100, 5, 0));
   book.apply(makeNew(2, Side::Bid, 100, 5, 1));
   auto r = book.apply(makeNew(3, Side::Ask, 100, 7, 2));
-  ASSERT_EQ(r.fills.size(), 2u);
+  ASSERT_EQ(r.fills.size(), 2U);
   EXPECT_EQ(r.fills[0].restingId, OrderId{1});
   EXPECT_EQ(r.fills[0].quantity, Quantity{5});
   EXPECT_EQ(r.fills[1].restingId, OrderId{2});
   EXPECT_EQ(r.fills[1].quantity, Quantity{2});
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): order exists by construction.
   EXPECT_EQ(book.find(OrderId{2})->quantity, Quantity{3});
 }
 
@@ -90,7 +95,7 @@ TEST(ReferenceModel, PricePriorityAcrossLevels) {
   book.apply(makeNew(1, Side::Bid, 99, 5, 0));
   book.apply(makeNew(2, Side::Bid, 100, 5, 1));
   auto r = book.apply(makeNew(3, Side::Ask, 99, 8, 2));
-  ASSERT_EQ(r.fills.size(), 2u);
+  ASSERT_EQ(r.fills.size(), 2U);
   EXPECT_EQ(r.fills[0].restingId, OrderId{2}); // best bid first
   EXPECT_EQ(r.fills[0].price, Price{100});
   EXPECT_EQ(r.fills[1].restingId, OrderId{1});
@@ -102,11 +107,13 @@ TEST(ReferenceModel, ResidualRests) {
   ReferenceBook book;
   book.apply(makeNew(1, Side::Ask, 101, 3, 0));
   auto r = book.apply(makeNew(2, Side::Bid, 105, 10, 1));
-  ASSERT_EQ(r.fills.size(), 1u);
+  ASSERT_EQ(r.fills.size(), 1U);
   EXPECT_EQ(r.fills[0].quantity, Quantity{3});
   const auto residual = book.find(OrderId{2});
   ASSERT_TRUE(residual.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(residual->quantity, Quantity{7});
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(residual->price, Price{105});
 }
 
@@ -134,7 +141,7 @@ TEST(ReferenceModel, ModifyPriceChangeLosesPriority) {
   EXPECT_TRUE(r.fills.empty());
   EXPECT_EQ(book.bestBid(), Price{101});
   const auto ids = book.ordersAtLevel(Side::Bid, Price{100});
-  ASSERT_EQ(ids.size(), 1u);
+  ASSERT_EQ(ids.size(), 1U);
   EXPECT_EQ(ids[0], OrderId{2});
 }
 
@@ -146,26 +153,27 @@ TEST(ReferenceModel, ModifyQuantitySemantics) {
   // Decrease: stays ahead.
   book.apply(makeModify(1, 0, 4, 2));
   auto ids = book.ordersAtLevel(Side::Bid, Price{100});
-  ASSERT_EQ(ids.size(), 2u);
+  ASSERT_EQ(ids.size(), 2U);
   EXPECT_EQ(ids[0], OrderId{1});
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): order exists by construction.
   EXPECT_EQ(book.find(OrderId{1})->quantity, Quantity{4});
   // Increase: cancel/replace, goes behind.
   book.apply(makeModify(1, 0, 8, 3));
   ids = book.ordersAtLevel(Side::Bid, Price{100});
-  ASSERT_EQ(ids.size(), 2u);
+  ASSERT_EQ(ids.size(), 2U);
   EXPECT_EQ(ids[0], OrderId{2});
   EXPECT_EQ(ids[1], OrderId{1});
 }
 
 // The generator must only emit valid events.
 TEST(EventGenerator, EmitsValidSequences) {
-  for (const std::uint64_t seed : {1u, 2u, 3u, 42u, 999u}) {
+  for (const std::uint64_t seed : {1ULL, 2ULL, 3ULL, 42ULL, 999ULL}) {
     GeneratorConfig config;
     config.seed = seed;
     config.eventCount = 100;
     EventGenerator gen(config);
     const auto events = gen.generate();
-    ASSERT_EQ(events.size(), 100u);
+    ASSERT_EQ(events.size(), 100U);
     for (const auto& event : events) {
       EXPECT_EQ(validateEvent(event), EventValidationError::Ok)
           << "seed=" << seed << " event: " << EventGenerator::describe(event);

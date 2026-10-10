@@ -8,11 +8,13 @@
 #include "tests/support/minimizer.hpp"
 #include "tickforge/event/event.hpp"
 
+#include <algorithm>
 #include <gtest/gtest.h>
 
 namespace tickforge::test {
 namespace {
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): test factory.
 Event makeNew(std::uint64_t id, std::size_t seq) {
   Event e;
   e.type = EventType::NewOrder;
@@ -28,12 +30,9 @@ Event makeNew(std::uint64_t id, std::size_t seq) {
 
 // Predicate: fails iff the sequence contains a NewOrder with id 7.
 bool containsSeven(const std::vector<Event>& events) {
-  for (const auto& e : events) {
-    if (e.type == EventType::NewOrder && e.orderId == OrderId{7}) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(events, [](const Event& e) {
+    return e.type == EventType::NewOrder && e.orderId == OrderId{7};
+  });
 }
 
 TEST(Minimizer, ReducesToRelevantEvent) {
@@ -42,16 +41,16 @@ TEST(Minimizer, ReducesToRelevantEvent) {
     events.push_back(makeNew(id, id - 1));
   }
   const auto minimized = minimizeFailingSequence(events, containsSeven);
-  ASSERT_EQ(minimized.size(), 1u);
+  ASSERT_EQ(minimized.size(), 1U);
   EXPECT_EQ(minimized[0].orderId, OrderId{7});
   // Renormalized: dense seq starting at 0.
   EXPECT_EQ(minimized[0].sequence, Sequence{0});
 }
 
 TEST(Minimizer, KeepsInputWhenNothingRemovable) {
-  std::vector<Event> events{makeNew(7, 0)};
+  const std::vector<Event> events{makeNew(7, 0)};
   const auto minimized = minimizeFailingSequence(events, containsSeven);
-  ASSERT_EQ(minimized.size(), 1u);
+  ASSERT_EQ(minimized.size(), 1U);
   EXPECT_EQ(minimized[0].orderId, OrderId{7});
 }
 
