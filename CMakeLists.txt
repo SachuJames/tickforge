@@ -165,6 +165,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_replay.cpp
     tests/test_replay_lenient.cpp
     tests/test_session_config.cpp
+    tests/test_reproducibility.cpp
     tests/test_replay_book_integration.cpp
     tests/test_matching.cpp
     tests/test_matching_properties.cpp
