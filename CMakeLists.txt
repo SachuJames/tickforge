@@ -177,7 +177,16 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_market_data_integration.cpp
     tests/test_market_state.cpp
     tests/test_market_state_integration.cpp
+    tests/test_reference_model.cpp
+    tests/test_minimizer.cpp
+    tests/test_property_matching.cpp
+    tests/test_property_analytics.cpp
+    tests/test_property_replay.cpp
+    tests/support/reference_model.cpp
+    tests/support/event_generator.cpp
+    tests/support/minimizer.cpp
   )
+  target_include_directories(tickforge_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data GTest::gtest_main)
 
   include(GoogleTest)
