@@ -64,7 +64,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
       - name: Check formatting
-        run: clang-format --dry-run --Werror $(git ls-files 'src/*.cpp' 'tests/*.cpp' 'include/*.hpp')
+        run: clang-format --dry-run --Werror $(git ls-files 'src/*.cpp' 'tests/*.cpp' 'tests/support/*.cpp' 'tests/support/*.hpp' 'include/*.hpp')
 
   tidy:
     name: clang-tidy
@@ -79,4 +79,4 @@ jobs:
         run: cmake --preset default -DCMAKE_CXX_COMPILER=g++
 
       - name: Run clang-tidy
-        run: clang-tidy $(git ls-files 'src/*.cpp' 'tests/*.cpp') -p build
+        run: clang-tidy $(git ls-files 'src/*.cpp' 'tests/*.cpp' 'tests/support/*.cpp') -p build

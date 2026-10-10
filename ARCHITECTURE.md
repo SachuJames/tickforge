@@ -815,3 +815,80 @@ Day 10 added an end-to-end reproducibility audit
 4.2 contract (identical fills, book state, statistics, and metadata)
 plus metadata consistency (embedded hash equals the hash of the
 configuration actually used).
+
+## 14. Property-based testing (Day 11)
+
+### 14.1 Framework
+
+`tests/support/` holds test-only infrastructure (never production):
+
+* `deterministic_rng.hpp`: splitmix64 PRNG. Same seed gives the same
+  sequence on every platform; no implementation-defined behavior from
+  standard-library distributions.
+* `reference_model.hpp/.cpp`: an independent MBO book and
+  price-time-priority matcher written directly from SPEC.md 5, 6, and 7.
+  It uses a flat vector of resting orders with scan-based matching,
+  deliberately unlike the production ordered-map/FIFO-queue layout, so
+  shared implementation mistakes are unlikely. Validated against
+  hand-calculated cases in `tests/test_reference_model.cpp` before use
+  as a differential oracle.
+* `event_generator.hpp/.cpp`: generates bounded sequences of valid
+  events (new/cancel/modify). It keeps an internal reference book so
+  cancels and modifies always target live orders; every generated
+  sequence passes `validateEvent`. Same `GeneratorConfig` gives the
+  same sequence everywhere.
+* `minimizer.hpp/.cpp`: deterministic failing-sequence reduction.
+  Given a predicate that reports whether a candidate still reproduces
+  a failure, it removes contiguous chunks (largest first), then single
+  events. Candidates are renormalized (dense seqs, strictly increasing
+  timestamps) before the predicate runs.
+
+No external property-testing library was added; the existing
+C++20/GoogleTest/CMake setup proved sufficient.
+
+### 14.2 Test profiles
+
+Regular CI runs a small deterministic seed set (6 seeds x 100 events
+for matching/analytics, fewer for replay). An extended local profile
+(20 seeds x 500 events) runs only when `TICKFORGE_EXTENDED=1` is set;
+it is skipped otherwise so ordinary CI stays fast. No timing-based
+pass/fail thresholds exist anywhere.
+
+### 14.3 Coverage
+
+* `test_property_matching.cpp`: after EVERY generated event, production
+  (`OrderBook` + `MatchingEngine`) is compared against the reference
+  model: applied status, every fill field (aggressor/resting id, side,
+  price, quantity, timestamp, seq), order count, best bid/ask, price
+  levels best-first, FIFO order at each level, and each resting order's
+  side/price/quantity/arrivalSeq.
+* `test_property_analytics.cpp`: `QueueTracker` positions (rank,
+  quantity ahead, remaining, side/price) and lifecycle checked against
+  independent values from the reference book; `ExecutionStatistics`
+  (counts, quantities, min/max, exact VWAP rational) checked against an
+  independent portable-128-bit computation from the captured fills.
+* `test_property_replay.cpp`: strict-mode determinism over generated
+  sequences; lenient mode skips and counts invalid events while still
+  processing valid ones; strict mode aborts with the documented error
+  (`UnknownOrder`, `InvalidEvent`) on invalid input.
+* `test_reference_model.cpp`: hand-calculated oracle validation plus
+  generator validity/determinism checks.
+* `test_minimizer.cpp`: minimizer reduction and determinism.
+
+On failure, the report carries the seed, event index, the failing
+event, and the full printable sequence (`EventGenerator::describe`),
+enough to reproduce without the original environment. A failing
+sequence can be reduced with `minimizeFailingSequence` and pasted into
+a fixed regression test.
+
+### 14.4 Limitations
+
+Passing generated cases do not prove exhaustive correctness. Bounds:
+CI seeds cover hundreds of events per run, not the full input space.
+The reference model shares the specification interpretation with
+production (e.g. "0 means unchanged" in ModifyOrder); a misread of the
+spec in both places would not be caught. Modify semantics that change
+priority follow the cancel/replace contract both sides implement.
+Integer-overflow boundaries and hostile malformed input beyond the
+documented validation contract remain the domain of the existing
+example-based negative tests.
