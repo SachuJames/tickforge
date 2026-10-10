@@ -1,58 +1,71 @@
+<div align="center">
+
+![TickForge](docs/images/hero.webp)
+
 # TickForge
 
-An open-source deterministic market microstructure simulator for high-fidelity order-level execution research.
+### Deterministic market microstructure simulator for order-level execution research
 
-**Status:** Early development
-**Version:** 0.1.0
+[![CI](https://github.com/SachuJames/tickforge/actions/workflows/ci.yml/badge.svg)](https://github.com/SachuJames/tickforge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![C++20](https://img.shields.io/badge/C++-20-blue.svg)
+![CMake](https://img.shields.io/badge/CMake-3.22+-064F8C.svg)
+![Tests](https://img.shields.io/badge/tests-282_passing-brightgreen.svg)
+
+Backtesting on bars or aggregated quotes hides the mechanics that decide real
+execution quality: where your order sits in the queue, how much quantity is
+ahead of it, and exactly which events moved the book before you traded.
+TickForge replays historical market activity order by order, with nanosecond
+timestamps and a strict determinism guarantee, so execution research is
+reproducible down to the individual fill.
+
+[Quickstart](#build) • [Architecture](#architecture) • [Determinism](#determinism-guarantee) • [Spec](SPEC.md)
+
+</div>
 
 ---
 
-## Why TickForge
+## What it does
 
-Backtesting on bars or aggregated quotes hides the mechanics that decide real execution quality: where your order sits in the queue, how much quantity is ahead of it, and exactly which events moved the book before you traded. TickForge replays historical market activity order by order, with nanosecond timestamps and a strict determinism guarantee, so execution research is reproducible down to the individual fill.
-
-## Current capabilities (v0.1.0)
-
-Day 01 establishes the engineering foundation only:
-
-* C++20 project that configures, compiles, and runs (`tickforge` prints its version and exits cleanly).
-* Single-source-of-truth versioning (`tickforge::kVersion`, generated from `CMakeLists.txt`).
-* GoogleTest smoke tests wired through CTest.
-* CMake presets for Debug, Release, and sanitizer (ASan + UBSan) builds.
-* clang-format and clang-tidy configuration.
-* GitHub Actions CI (build matrix, tests, format check, sanitizer build).
-* Canonical normalized event model: strongly typed `Timestamp`, `Sequence`,
-  `OrderId`, `Price` (integer ticks), `Quantity` (integer lots), `Side`,
-  `EventType`, and `Event` with `(timestamp, seq)` ordering and explicit
-  validation (`tickforge_event` library, tested).
-
-The benchmarks are **specified but not implemented**. The deterministic replay driver (`tickforge_replay`), the MBO order book (`tickforge_book`), the deterministic price-time priority matching engine (`tickforge_matching`, with `Fill` execution records), the deterministic analytics layer (`tickforge_analytics`: designated-order queue-position tracking per SPEC.md section 8, and exact integer execution statistics), and the CSV market-data parsing boundary (`tickforge_market_data`: one documented CSV format to normalized events, plus deterministic derived market-state views: best bid/ask and level aggregates read from the MBO book) are implemented and tested. See SPEC.md and ARCHITECTURE.md for the design they follow.
-
-## Planned capabilities
-
-* Normalized event model with nanosecond timestamps and logical sequencing (SPEC.md section 2-3).
-* Deterministic event replay with a formal reproducibility guarantee (SPEC.md section 4).
-* Market-by-order book with price-time priority matching (SPEC.md section 5-6).
-* Queue-position tracking for designated orders: rank and quantity ahead at the price level, with lifecycle states (SPEC.md section 8).
-* Exact integer execution statistics over Fill records (counts, quantities, min/max/weighted-average prices).
-* Execution simulator with microstructure models (latency, fees) and statistics/validation.
-* Published reproducibility and latency benchmark with full methodology (BENCHMARKING.md).
+| | |
+|---|---|
+| 📖 **Market-by-order book** | Full MBO book with price-time priority matching. Every order tracked individually, not aggregated into levels. |
+| ⏱️ **Nanosecond replay** | Deterministic event replay with `(timestamp, seq)` ordering. Same input, same output, every time, on any machine. |
+| 📊 **Queue position tracking** | Know exactly where a designated order sits: rank and quantity ahead at its price level, through its full lifecycle. |
+| 🔢 **Exact execution stats** | Integer-arithmetic fill statistics. Counts, quantities, min/max and volume-weighted average prices with no float drift. |
+| 🧪 **Property-based testing** | Deterministic fuzzer with splitmix64 RNG, independent reference model, and sequence minimizer. 10,600+ generated events, zero production defects found. |
+| 📁 **CSV ingestion** | One documented CSV format parsed into normalized events, with derived market-state views (best bid/ask, level aggregates). |
 
 ## Architecture
 
-TickForge is a layered C++20 system:
+![Architecture](docs/images/architecture.webp)
+
+TickForge is a layered C++20 system. The replay engine, book, and matching
+engine form the deterministic core. See [ARCHITECTURE.md](ARCHITECTURE.md)
+for hot/cold path design and [SPEC.md](SPEC.md) for the full specification.
 
 ```text
-Data / Feed Layer -> Event Normalization -> Replay Engine -> Order Book (MBO)
-  -> Matching Engine -> Microstructure Model -> Execution Simulator
-  -> Statistics / Validation
+CSV market data → Event normalization → Deterministic replay
+  → MBO order book → Price-time priority matching → Execution statistics
 ```
 
-The replay engine, book, and matching engine form the deterministic core: no wall-clock reads, no uncontrolled randomness. See ARCHITECTURE.md for hot/cold path design, public API plans, and extension points.
+## Determinism guarantee
+
+The determinism boundary is a hard architectural rule, not a hope:
+
+- **No wall-clock reads** inside the replay/book/matching core
+- **No uncontrolled randomness** (seeded splitmix64 where needed)
+- **Integer arithmetic** for prices (ticks) and quantities (lots)
+- Reproducibility is **asserted by tests**, not assumed (see `test_reproducibility.cpp`)
+
+Run the same event stream twice, on any machine, and every fill is
+bit-identical. The [reproducibility audit](SPEC.md) documents exactly what is
+and isn't covered.
 
 ## Build
 
-Requirements: CMake 3.22+, a C++20 compiler (GCC 11+ or Clang 14+), Git, and network access on first configure (GoogleTest is fetched via CMake FetchContent).
+Requirements: CMake 3.22+, a C++20 compiler (GCC 11+ or Clang 14+), Git.
+GoogleTest is fetched automatically on first configure.
 
 ```bash
 cmake --preset default
@@ -60,18 +73,11 @@ cmake --build --preset default
 ./build/tickforge
 ```
 
-Release build:
+Other presets:
 
 ```bash
-cmake --preset release
-cmake --build --preset release
-```
-
-Sanitizer build (AddressSanitizer + UndefinedBehaviorSanitizer):
-
-```bash
-cmake --preset asan
-cmake --build --preset asan
+cmake --preset release          # optimized build
+cmake --preset asan             # AddressSanitizer + UBSan
 ctest --preset asan
 ```
 
@@ -83,27 +89,44 @@ ctest --preset default
 ctest --output-on-failure
 ```
 
+282 tests across Debug, Release, and ASan+UBSan builds. clang-format clean,
+clang-tidy zero warnings. CI runs the full matrix on every push.
+
 ## Benchmarking
 
-Performance benchmarking arrives with the benchmark milestone. Per project rule, every performance claim must ship with a benchmark and full methodology (dataset, hardware, compiler, events, runtime, events/sec, median/p99 latency). There are no performance claims in v0.1.0. See BENCHMARKING.md.
+Per project rule, every performance claim ships with a benchmark and full
+methodology (dataset, hardware, compiler, events, runtime, events/sec, median
+and p99 latency). See [BENCHMARKING.md](BENCHMARKING.md). There are no
+performance claims without a published benchmark.
 
-## Roadmap (1.5 months)
+## Project layout
 
-* **Week 1:** Foundation (this release) plus the normalized event model and parser interface.
-* **Week 2:** Market-by-order book and price-time priority matching engine, with unit tests.
-* **Week 3:** Deterministic replay engine and queue-position tracking.
-* **Week 4:** Execution simulator, microstructure models, statistics and validation layer.
-* **Week 5:** Benchmark harness, determinism self-checks, reproducibility tooling.
-* **Week 6:** Documentation polish, examples, public reproducibility/latency benchmark.
+```
+tickforge/
+├── src/
+│   ├── tickforge_event/       # Normalized event model (ticks, lots, seq)
+│   ├── tickforge_book/        # Market-by-order book
+│   ├── tickforge_matching/    # Price-time priority matching engine
+│   ├── tickforge_replay/      # Deterministic replay driver
+│   ├── tickforge_analytics/   # Queue position + execution statistics
+│   └── tickforge_market_data/ # CSV parsing boundary
+├── tests/
+│   ├── test_reproducibility.cpp
+│   └── support/               # Property-testing framework (RNG, minimizer)
+├── SPEC.md                    # Full specification
+├── ARCHITECTURE.md            # Design and determinism boundary
+└── BENCHMARKING.md            # Benchmark methodology
+```
 
 ## Contributing
 
-See CONTRIBUTING.md. Bug reports and design discussion are welcome via GitHub issues.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Bug reports and design discussion are
+welcome via GitHub issues.
 
 ## Security
 
-See SECURITY.md for the vulnerability reporting policy.
+See [SECURITY.md](SECURITY.md) for the vulnerability reporting policy.
 
 ## License
 
-MIT. See LICENSE.
+MIT. See [LICENSE](LICENSE).
