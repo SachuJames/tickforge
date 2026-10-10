@@ -796,3 +796,22 @@ identical fills and book state.
 * No file I/O: serialization is to and from strings; the caller owns
   files.
 * No global or mutable configuration state.
+
+### 13.6 Reproducibility boundary (Day 10)
+
+The configuration hash identifies the canonical configuration only.
+It does not identify the event stream, the source dataset, or the
+build. SPEC.md 9.3 defines the normalized event stream as the
+reproducibility boundary ("two parsers producing the same normalized
+stream MUST produce the same simulation") but requires no stream
+identifier; SPEC.md 9.6 requires outputs to embed only the TickForge
+version and the configuration hash. A stream-identity hash is therefore
+a potential future enhancement, not a current requirement, and was
+deliberately not added.
+
+Day 10 added an end-to-end reproducibility audit
+(`tests/test_reproducibility.cpp`): CSV -> parser -> `SessionConfig`
+-> replay -> matching -> statistics, run twice, asserting the SPEC.md
+4.2 contract (identical fills, book state, statistics, and metadata)
+plus metadata consistency (embedded hash equals the hash of the
+configuration actually used).
