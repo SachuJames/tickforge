@@ -14,9 +14,29 @@
 
 #include <gtest/gtest.h>
 #include <sstream>
+#include <string>
+#include <vector>
 
 namespace tickforge::test {
 namespace {
+
+// Verifies dense sequences from 0 for a batch of events.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): test helper, seed first is clear.
+void checkDenseSequences(std::uint64_t seed, const std::vector<Event>& events) {
+  for (std::size_t i = 0; i < events.size(); ++i) {
+    EXPECT_EQ(events[i].sequence, Sequence{i}) << "seed=" << seed;
+  }
+}
+
+// Verifies all events carry the expected instrument.
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters): test helper, seed first is clear.
+void checkInstrument(std::uint64_t seed,
+                     const std::vector<Event>& events,
+                     const std::string& instrument) {
+  for (const auto& e : events) {
+    EXPECT_EQ(e.instrument, instrument) << "seed=" << seed;
+  }
+}
 
 // Valid generated streams must parse cleanly with dense sequences.
 TEST(ParserFuzz, ValidStreamsParse) {
@@ -28,20 +48,14 @@ TEST(ParserFuzz, ValidStreamsParse) {
     CsvGenerator gen(config);
     const std::string csv = gen.generate();
 
-    CsvParser parser("AAPL");
+    const CsvParser parser("AAPL");
     std::istringstream input(csv);
     const StreamResult result = parser.parseStream(input);
 
     EXPECT_EQ(result.error, ParseError::Ok) << "seed=" << seed << " diag=" << result.diagnostic;
     EXPECT_EQ(result.events.size(), 30U) << "seed=" << seed;
-    // Dense sequences from 0.
-    for (std::size_t i = 0; i < result.events.size(); ++i) {
-      EXPECT_EQ(result.events[i].sequence, Sequence{i}) << "seed=" << seed;
-    }
-    // All events carry the parser's instrument.
-    for (const auto& e : result.events) {
-      EXPECT_EQ(e.instrument, "AAPL") << "seed=" << seed;
-    }
+    checkDenseSequences(seed, result.events);
+    checkInstrument(seed, result.events, "AAPL");
   }
 }
 
@@ -56,7 +70,7 @@ TEST(ParserFuzz, MalformedStreamsBehave) {
     CsvGenerator gen(config);
     const std::string csv = gen.generate();
 
-    CsvParser parser("AAPL");
+    const CsvParser parser("AAPL");
     std::istringstream input(csv);
     const StreamResult result = parser.parseStream(input);
 
@@ -76,7 +90,7 @@ TEST(ParserFuzz, MalformedTable) {
   const auto cases = generateMalformedTable();
   ASSERT_FALSE(cases.empty());
   for (const auto& c : cases) {
-    CsvParser parser("AAPL");
+    const CsvParser parser("AAPL");
     std::istringstream input(c.input);
     const StreamResult result = parser.parseStream(input);
     EXPECT_NE(result.error, ParseError::Ok) << "case: " << c.description;
@@ -85,7 +99,7 @@ TEST(ParserFuzz, MalformedTable) {
 
 // Header-only stream is valid (empty event stream), not malformed.
 TEST(ParserFuzz, HeaderOnlyStreamIsValid) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   std::istringstream input("timestamp,event_type,order_id,side,price,quantity\n");
   const StreamResult r = parser.parseStream(input);
   EXPECT_EQ(r.error, ParseError::Ok);
@@ -94,7 +108,7 @@ TEST(ParserFuzz, HeaderOnlyStreamIsValid) {
 
 // Numeric boundary: max int64 timestamp accepted, overflow rejected.
 TEST(ParserFuzz, TimestampBoundaries) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   const std::string header = "timestamp,event_type,order_id,side,price,quantity\n";
 
   // Max int64.
@@ -119,7 +133,7 @@ TEST(ParserFuzz, TimestampBoundaries) {
 
 // Numeric boundary: max uint64 order_id accepted, overflow rejected.
 TEST(ParserFuzz, OrderIdBoundaries) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   const std::string header = "timestamp,event_type,order_id,side,price,quantity\n";
 
   {
@@ -142,7 +156,7 @@ TEST(ParserFuzz, OrderIdBoundaries) {
 
 // Plus sign is rejected by from_chars (only minus is allowed).
 TEST(ParserFuzz, NumericFormats) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
 
   {
     const ParseResult r = parser.parseRecord("+1000000,N,1,B,+100,+10", Sequence{0});
@@ -175,11 +189,10 @@ TEST(ParserFuzz, NumericFormats) {
 
 // CRLF line endings are handled (CR is trimmed).
 TEST(ParserFuzz, CrlfLineEndings) {
-  CsvParser parser("AAPL");
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\r\n"
-      "1000000,N,1,B,100,10\r\n"
-      "1000001,N,2,A,101,5\r\n";
+  const CsvParser parser("AAPL");
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\r\n"
+                          "1000000,N,1,B,100,10\r\n"
+                          "1000001,N,2,A,101,5\r\n";
   std::istringstream input(csv);
   const StreamResult r = parser.parseStream(input);
   EXPECT_EQ(r.error, ParseError::Ok) << r.diagnostic;
@@ -188,16 +201,15 @@ TEST(ParserFuzz, CrlfLineEndings) {
 
 // Trailing newline vs no trailing newline: same events.
 TEST(ParserFuzz, TrailingNewline) {
-  CsvParser parser("AAPL");
-  const std::string base =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,N,2,A,101,5";
+  const CsvParser parser("AAPL");
+  const std::string base = "timestamp,event_type,order_id,side,price,quantity\n"
+                           "1000000,N,1,B,100,10\n"
+                           "1000001,N,2,A,101,5";
 
-  std::istringstream withNewline(base + "\n");
-  std::istringstream withoutNewline(base);
-  const StreamResult r1 = parser.parseStream(withNewline);
-  const StreamResult r2 = parser.parseStream(withoutNewline);
+  std::istringstream with_newline(base + "\n");
+  std::istringstream without_newline(base);
+  const StreamResult r1 = parser.parseStream(with_newline);
+  const StreamResult r2 = parser.parseStream(without_newline);
 
   EXPECT_EQ(r1.error, ParseError::Ok);
   EXPECT_EQ(r2.error, ParseError::Ok);
@@ -210,24 +222,23 @@ TEST(ParserFuzz, TrailingNewline) {
 
 // Stream stops at first error; earlier events are preserved.
 TEST(ParserFuzz, StreamStopsAtFirstError) {
-  CsvParser parser("AAPL");
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,N,2,A,101,5\n"
-      "1000002,X,3,B,100,10\n" // bad event type
-      "1000003,N,4,B,100,10\n"; // never processed
+  const CsvParser parser("AAPL");
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\n"
+                          "1000000,N,1,B,100,10\n"
+                          "1000001,N,2,A,101,5\n"
+                          "1000002,X,3,B,100,10\n"  // bad event type
+                          "1000003,N,4,B,100,10\n"; // never processed
   std::istringstream input(csv);
   const StreamResult r = parser.parseStream(input);
 
   EXPECT_EQ(r.error, ParseError::InvalidEventType);
-  EXPECT_EQ(r.lineNumber, 4U); // 1-based: header=1, records=2,3, bad=4
+  EXPECT_EQ(r.lineNumber, 4U);    // 1-based: header=1, records=2,3, bad=4
   EXPECT_EQ(r.events.size(), 2U); // partial results preserved
 }
 
 // Failed records do not leak events: parseRecord returns default event.
 TEST(ParserFuzz, FailedRecordYieldsNoEvent) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   const ParseResult r = parser.parseRecord("1000000,X,1,B,100,10", Sequence{5});
   EXPECT_EQ(r.error, ParseError::InvalidEventType);
   // Event is default-constructed except sequence/instrument which are set upfront.
@@ -237,11 +248,10 @@ TEST(ParserFuzz, FailedRecordYieldsNoEvent) {
 
 // Fresh parser state: parsing the same input twice gives same result.
 TEST(ParserFuzz, RepeatableParsing) {
-  CsvParser parser("AAPL");
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,C,1,,,\n";
+  const CsvParser parser("AAPL");
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\n"
+                          "1000000,N,1,B,100,10\n"
+                          "1000001,C,1,,,\n";
 
   std::istringstream input1(csv);
   std::istringstream input2(csv);

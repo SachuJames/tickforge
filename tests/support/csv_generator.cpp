@@ -8,8 +8,7 @@
 
 namespace tickforge::test {
 
-CsvGenerator::CsvGenerator(const CsvGeneratorConfig& config)
-    : config_(config), rng_(config.seed) {}
+CsvGenerator::CsvGenerator(const CsvGeneratorConfig& config) : config_(config), rng_(config.seed) {}
 
 std::string CsvGenerator::randomNumericField(bool allowEmpty, bool signedValue) {
   if (allowEmpty && rng_.nextBounded(10) == 0) {
@@ -17,7 +16,7 @@ std::string CsvGenerator::randomNumericField(bool allowEmpty, bool signedValue) 
   }
   // Bounded values to stay within valid ranges for the "valid" generator.
   // Malformed cases use the explicit table instead.
-  std::int64_t value = static_cast<std::int64_t>(rng_.nextRange(1, 10000));
+  auto value = static_cast<std::int64_t>(rng_.nextRange(1, 10000));
   if (signedValue && rng_.nextBool()) {
     value = -value;
   }
@@ -26,7 +25,13 @@ std::string CsvGenerator::randomNumericField(bool allowEmpty, bool signedValue) 
 
 std::string CsvGenerator::randomEventType() {
   const int roll = static_cast<int>(rng_.nextBounded(3));
-  return roll == 0 ? "N" : (roll == 1 ? "M" : "C");
+  if (roll == 0) {
+    return "N";
+  }
+  if (roll == 1) {
+    return "M";
+  }
+  return "C";
 }
 
 std::string CsvGenerator::randomSide() {
@@ -87,7 +92,7 @@ std::string CsvGenerator::malformRecord(const std::string& validRecord) {
     }
     break;
   case 1: // Add an extra field
-    fields.push_back("extra");
+    fields.emplace_back("extra");
     break;
   case 2: // Empty the timestamp
     fields[0] = "";
@@ -149,7 +154,6 @@ std::string CsvGenerator::generate() {
 
 std::vector<MalformedCase> generateMalformedTable() {
   const std::string header = "timestamp,event_type,order_id,side,price,quantity\n";
-  const std::string valid = "1000000,N,1,B,100,10";
   return {
       {header + "1000000,N,1,B,100", "missing quantity field"},
       {header + "1000000,N,1,B,100,10,extra", "extra field"},
@@ -171,8 +175,7 @@ std::vector<MalformedCase> generateMalformedTable() {
        "uppercase header"},
       {"", "empty input"},
       {header + "\n", "header with blank line"},
-      {header + "1000000,N,1,B,100,10\n\n1000001,N,2,A,101,5",
-       "blank line between records"},
+      {header + "1000000,N,1,B,100,10\n\n1000001,N,2,A,101,5", "blank line between records"},
   };
 }
 

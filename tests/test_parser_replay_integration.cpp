@@ -23,9 +23,9 @@ namespace {
 // A valid CSV stream with orders that will match.
 std::string makeMatchingStream() {
   return "timestamp,event_type,order_id,side,price,quantity\n"
-         "1000000,N,1,B,100,10\n"  // bid rests
-         "1000001,N,2,A,100,5\n"   // ask crosses, fills 5
-         "1000002,N,3,A,101,3\n";  // ask rests (no cross)
+         "1000000,N,1,B,100,10\n" // bid rests
+         "1000001,N,2,A,100,5\n"  // ask crosses, fills 5
+         "1000002,N,3,A,101,3\n"; // ask rests (no cross)
 }
 
 // Parses and replays strictly. Returns the replay result and book.
@@ -39,7 +39,7 @@ struct IntegrationResult {
 
 IntegrationResult parseAndReplay(const std::string& csv, ReplayMode mode) {
   IntegrationResult out;
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   std::istringstream input(csv);
   out.parseResult = parser.parseStream(input);
   if (out.parseResult.error != ParseError::Ok) {
@@ -87,10 +87,9 @@ TEST(ParserReplay, GeneratedValidStreamsReplay) {
 // Parser error is distinct from replay error: a malformed CSV never
 // reaches replay.
 TEST(ParserReplay, ParserErrorBlocksReplay) {
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,X,2,A,100,5\n"; // bad event type
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\n"
+                          "1000000,N,1,B,100,10\n"
+                          "1000001,X,2,A,100,5\n"; // bad event type
   const auto result = parseAndReplay(csv, ReplayMode::Strict);
 
   EXPECT_EQ(result.parseResult.error, ParseError::InvalidEventType);
@@ -103,10 +102,9 @@ TEST(ParserReplay, ParserErrorBlocksReplay) {
 // Strict replay aborts on dispatch failure (unknown cancel).
 // The CSV is valid; the replay fails.
 TEST(ParserReplay, StrictReplayAbortsOnUnknownCancel) {
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,C,999,B,0,0\n"; // cancel unknown order
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\n"
+                          "1000000,N,1,B,100,10\n"
+                          "1000001,C,999,B,0,0\n"; // cancel unknown order
   const auto result = parseAndReplay(csv, ReplayMode::Strict);
 
   EXPECT_EQ(result.parseResult.error, ParseError::Ok); // CSV is fine
@@ -116,11 +114,10 @@ TEST(ParserReplay, StrictReplayAbortsOnUnknownCancel) {
 
 // Lenient replay skips the unknown cancel and continues.
 TEST(ParserReplay, LenientReplaySkipsUnknownCancel) {
-  const std::string csv =
-      "timestamp,event_type,order_id,side,price,quantity\n"
-      "1000000,N,1,B,100,10\n"
-      "1000001,C,999,B,0,0\n" // skipped
-      "1000002,N,2,A,101,5\n"; // processed
+  const std::string csv = "timestamp,event_type,order_id,side,price,quantity\n"
+                          "1000000,N,1,B,100,10\n"
+                          "1000001,C,999,B,0,0\n"  // skipped
+                          "1000002,N,2,A,101,5\n"; // processed
   const auto result = parseAndReplay(csv, ReplayMode::Lenient);
 
   EXPECT_EQ(result.parseResult.error, ParseError::Ok);
@@ -131,7 +128,7 @@ TEST(ParserReplay, LenientReplaySkipsUnknownCancel) {
 
 // Instrument mismatch is fatal in both modes, even with valid CSV.
 TEST(ParserReplay, InstrumentMismatchFatal) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   std::istringstream input(makeMatchingStream());
   const StreamResult parseResult = parser.parseStream(input);
   ASSERT_EQ(parseResult.error, ParseError::Ok);
@@ -153,7 +150,7 @@ TEST(ParserReplay, InstrumentMismatchFatal) {
 
 // State isolation: a failed parse does not affect the next parse.
 TEST(ParserReplay, FailedParseIsolatesState) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
 
   // First: malformed stream.
   {
@@ -176,7 +173,7 @@ TEST(ParserReplay, FailedParseIsolatesState) {
 
 // Sequences are dense and restart for each parseStream call.
 TEST(ParserReplay, SequencesRestartPerStream) {
-  CsvParser parser("AAPL");
+  const CsvParser parser("AAPL");
   for (int i = 0; i < 2; ++i) {
     std::istringstream input(makeMatchingStream());
     const StreamResult r = parser.parseStream(input);
