@@ -892,3 +892,57 @@ priority follow the cancel/replace contract both sides implement.
 Integer-overflow boundaries and hostile malformed input beyond the
 documented validation contract remain the domain of the existing
 example-based negative tests.
+
+## 15. CSV parser verification (Day 12)
+
+### 15.1 Parser contract
+
+The CSV parser (`CsvParser`) is the input boundary (SPEC.md 9, stage 2).
+Audited contract:
+
+* Header must be byte-exact `timestamp,event_type,order_id,side,price,quantity`
+  (whitespace-trimmed). Missing/wrong header yields `BadHeader`.
+* Six comma-separated fields per record; fields trimmed of space/tab/CR.
+  Quoting (`"`) is rejected. Wrong count yields `WrongFieldCount`.
+* `timestamp`: signed int64 via `from_chars` (no `+` prefix, no decimals).
+  `order_id`: unsigned uint64 (no negatives). `price`/`quantity`: signed
+  int64, empty means 0. Overflow yields `NumericOverflow` with the
+  specific field error otherwise.
+* `event_type`: `N`/`M`/`C` exact. `side`: `B`/`A` exact. Case matters.
+* After parsing, `validateEvent()` gates the event; failures yield
+  `EventRejected` with the validation reason. The parser never duplicates
+  domain rules.
+* `parseStream()` is strict: stops at the first error, returns partial
+  results (events before the failure), 1-based `lineNumber`, dense
+  sequences from 0 per stream.
+* Instrument comes from the parser constructor, not the CSV.
+
+### 15.2 Test infrastructure
+
+`tests/support/csv_generator.*`: deterministic CSV generator reusing the
+Day 11 `DeterministicRng`. Generates valid streams (all event types with
+valid field combinations) and applies 12 controlled malformations
+(dropped/extra fields, bad enums, non-numeric, overflow, negative
+unsigned, decimals, whitespace, quotes, truncation). `generateMalformedTable()`
+provides 20 fixed adversarial cases with descriptions.
+
+### 15.3 Coverage
+
+* `test_parser_fuzz.cpp` (12 tests): valid streams parse with dense
+  sequences; malformed table cases all fail; numeric boundaries
+  (int64/uint64 min/max/overflow); `from_chars` format rules (`+`
+  rejected, leading zeros accepted, decimals/hex rejected); CRLF
+  handling; trailing newline equivalence; first-error stopping with
+  partial results; failed records yield no events; repeatable parsing.
+* `test_parser_replay_integration.cpp` (8 tests): valid parsed streams
+  replay correctly; parser errors block replay (distinct from replay
+  errors); strict aborts on unknown cancel; lenient skips and counts;
+  instrument mismatch fatal in both modes; parse state isolation;
+  sequences restart per stream.
+
+### 15.4 Findings
+
+No production defects. Two test-expectation corrections during
+development: (1) header-only stream is valid (empty event stream), not
+malformed; (2) `from_chars` rejects `+` prefix (only `-` allowed for
+signed integers). Both are now documented by tests.
