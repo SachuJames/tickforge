@@ -181,6 +181,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_minimizer.cpp
     tests/test_parser_fuzz.cpp
     tests/test_parser_replay_integration.cpp
+    tests/test_replay_adversarial.cpp
     tests/test_property_matching.cpp
     tests/test_property_analytics.cpp
     tests/test_property_replay.cpp

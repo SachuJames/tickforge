@@ -946,3 +946,66 @@ No production defects. Two test-expectation corrections during
 development: (1) header-only stream is valid (empty event stream), not
 malformed; (2) `from_chars` rejects `+` prefix (only `-` allowed for
 signed integers). Both are now documented by tests.
+
+## 16. Adversarial replay verification (Day 13)
+
+### 16.1 Replay contract (from code inspection)
+
+Ordering: replay requires strictly increasing `(timestamp, seq)` pairs
+via `Event::operator<`. Equal timestamps are allowed when sequences
+increase; duplicate `(timestamp, seq)` keys are rejected as
+`UnsortedInput`. Sequence numbers alone carry no invariant: gaps and
+reused values are valid if the pair ordering holds.
+
+Instrument: the first event's instrument becomes the session instrument.
+Any deviation aborts with `InstrumentMismatch`, fatal in both strict and
+lenient modes.
+
+Strict mode: first invalid event aborts (`InvalidEvent`), first rejected
+dispatch aborts (`UnknownOrder` for cancel/modify, `DuplicateOrder` for
+new). Lenient mode: invalid events and rejected dispatches are skipped
+and counted in `skippedCount`; ordering and instrument violations remain
+fatal. Aborts leave already-applied events in place (no rollback).
+
+### 16.2 Test infrastructure
+
+`tests/test_replay_adversarial.cpp`: reuses Day 11's `EventGenerator`
+for valid baseline sequences (with live-order tracking, so cancels and
+modifies always target live orders). A test-only `FillCollector`
+wraps `MatchingEngine` to accumulate fills across all events
+(production only retains the last event's fills). Mutation helpers apply
+one deliberate change at a time to a valid sequence.
+
+### 16.3 Coverage (22 tests)
+
+* Timestamp mutations: adjacent NewOrder swap, decreased timestamp,
+  equal timestamps with increasing/decreasing sequences, duplicate
+  `(timestamp, seq)` keys. Verifies `UnsortedInput` aborts in both
+  modes and prefix state preservation (no rollback, no double-apply).
+* Sequence mutations: gaps and reused values with increasing timestamps
+  are valid (documents that seq alone has no invariant).
+* Instrument mutations: single-event mismatch aborts with
+  `InstrumentMismatch` in strict and lenient; prefix state matches
+  clean prefix replay; consistent-instrument control replays cleanly.
+* Validity mutations: zero-quantity new order, cancel with price payload.
+  Strict aborts with `InvalidEvent` and the specific
+  `EventValidationError`; lenient skips, counts, and continues.
+* Dispatch mutations: unknown cancel (`UnknownOrder`), duplicate order
+  id (`DuplicateOrder` when the id is still live). Lenient skips without
+  corrupting book state.
+* State integrity: quantity conservation over generated sequences;
+  reference-model differential (fills, resting counts, best bid/ask);
+  mutated-sequence determinism; CSV-to-replay pipeline equivalence.
+* Extended profile (`TICKFORGE_EXTENDED=1`): 10 seeds x 200 events with
+  timestamp mutations.
+
+### 16.4 Findings
+
+No production defects. Three test-expectation corrections during
+development: (1) swapping arbitrary adjacent events can cause
+`UnknownOrder` before the ordering check runs (the driver processes
+event-by-event; the test now swaps adjacent NewOrders to isolate the
+ordering violation); (2) corrupting a NewOrder can cascade into
+`UnknownOrder` skips for its dependents in lenient mode (test now uses
+a hand-crafted sequence); (3) `Timestamp` exposes `count()`, not
+`value()`.
