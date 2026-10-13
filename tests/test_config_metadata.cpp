@@ -17,8 +17,8 @@
 #include "tickforge/replay/replay.hpp"
 #include "tickforge/replay/session_config.hpp"
 
-#include <gtest/gtest.h>
 #include <cstdlib>
+#include <gtest/gtest.h>
 #include <string>
 #include <vector>
 
@@ -239,6 +239,7 @@ TEST(ReplayMetadata, ConfiguredReplayHasHash) {
   const auto result = replayEvents(events, engine, config);
   EXPECT_TRUE(result.ok());
   ASSERT_TRUE(result.configHash.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(*result.configHash, expected);
   EXPECT_EQ(result.version, "0.1.0");
   EXPECT_EQ(result.mode, ReplayMode::Strict);
@@ -260,7 +261,7 @@ TEST(ReplayMetadata, HashOnFailurePaths) {
 
 TEST(ReplayMetadata, HashMatchesActualConfig) {
   // Two different configs produce different hashes in results.
-  SessionConfig strict = minimalConfig();
+  const SessionConfig strict = minimalConfig();
   SessionConfig lenient = minimalConfig();
   lenient.mode = ReplayMode::Lenient;
   OrderBook book1;
@@ -272,6 +273,7 @@ TEST(ReplayMetadata, HashMatchesActualConfig) {
   const auto r2 = replayEvents(events, engine2, lenient);
   ASSERT_TRUE(r1.configHash.has_value());
   ASSERT_TRUE(r2.configHash.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_NE(*r1.configHash, *r2.configHash);
   EXPECT_EQ(r1.mode, ReplayMode::Strict);
   EXPECT_EQ(r2.mode, ReplayMode::Lenient);
@@ -338,12 +340,13 @@ TEST(ConfiguredReplay, EmptyEventsWithConfig) {
   const auto result = replayEvents(events, engine, config);
   EXPECT_TRUE(result.ok());
   ASSERT_TRUE(result.configHash.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(*result.configHash, hashConfig(config));
 }
 
 TEST(ConfiguredReplay, SessionsIsolated) {
   // Two sequential replays with different configs do not interfere.
-  SessionConfig c1 = minimalConfig();
+  const SessionConfig c1 = minimalConfig();
   SessionConfig c2 = minimalConfig();
   c2.instrument = "MSFT";
   c2.mode = ReplayMode::Lenient;
@@ -360,6 +363,7 @@ TEST(ConfiguredReplay, SessionsIsolated) {
   EXPECT_TRUE(r2.ok());
   ASSERT_TRUE(r1.configHash.has_value());
   ASSERT_TRUE(r2.configHash.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_NE(*r1.configHash, *r2.configHash);
   EXPECT_EQ(book1.orderCount(), 2U);
   EXPECT_EQ(book2.orderCount(), 2U);
@@ -396,7 +400,7 @@ TEST(ConfigErrorMatrix, InvalidConfigLenient) {
 
 TEST(ConfigProperty, SerializationStableAcrossInstances) {
   // Independently constructed equivalent configs serialize identically.
-  for (std::uint64_t seed : {1ULL, 2ULL, 3ULL}) {
+  for (const std::uint64_t seed : {1ULL, 2ULL, 3ULL}) {
     DeterministicRng rng(seed);
     SessionConfig a = minimalConfig();
     SessionConfig b = minimalConfig();
@@ -425,6 +429,7 @@ TEST(ConfigProperty, RoundTripPreservesSemantics) {
   EXPECT_EQ(hashConfig(parsed.config), hashConfig(config));
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity): test with many assertions.
 TEST(ConfigProperty, ExtendedStress) {
   if (std::getenv("TICKFORGE_EXTENDED") == nullptr) {
     GTEST_SKIP() << "Set TICKFORGE_EXTENDED=1 to run the extended stress profile.";
