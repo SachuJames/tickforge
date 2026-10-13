@@ -1009,3 +1009,58 @@ ordering violation); (2) corrupting a NewOrder can cascade into
 `UnknownOrder` skips for its dependents in lenient mode (test now uses
 a hand-crafted sequence); (3) `Timestamp` exposes `count()`, not
 `value()`.
+
+## 17. Adversarial modify verification (Day 14)
+
+### 17.1 Modify contract (SPEC.md 5.5, from code inspection)
+
+* Price change OR quantity increase: cancel/replace. The order loses
+  time priority and receives a new `arrival_seq` equal to the modify
+  event's `seq`. The replacement may match immediately as an aggressor.
+* Quantity decrease at the same price: in-place update. Time priority
+  is preserved.
+* Zero price/quantity in the event means "unchanged" (Day 02 encoding).
+  Both zero is `EmptyModify` (invalid).
+* Unknown order id: processor returns false; replay reports
+  `UnknownOrder` (strict) or skips (lenient).
+* Production `MatchingEngine::processModify` and the reference
+  `ReferenceBook::applyModify` implement identical semantics, verified
+  independently against the specification.
+
+### 17.2 Test infrastructure
+
+`tests/test_modify_adversarial.cpp`: hand-calculated scenarios plus
+adversarial generation. Test-only `ModifyFillCollector` accumulates
+fills across all events. Event builders (`makeNew`, `makeModify`,
+`makeCancel`) construct exact scenarios. `checkFillDifferential`
+compares production and reference fill-by-fill (all seven Fill fields,
+in order) plus resting-order counts and best bid/ask.
+
+### 17.3 Coverage (20 tests)
+
+* Hand-calculated: non-crossing price change; quantity decrease keeps
+  FIFO priority; quantity increase loses priority (back of queue);
+  crossing replacement with partial fill and residual; multi-level
+  sweep (3 fills, price-time order verified); unknown-order modify in
+  strict/lenient; empty modify invalid.
+* Adversarial price: non-crossing to occupied level (back of queue);
+  crossing at exactly the opposing best; crossing the entire book.
+* Adversarial quantity: decrease to minimum (1 lot); zero-quantity
+  modify invalid (`EmptyModify`); negative quantity invalid.
+* Queue priority: replacement at back of destination level verified
+  via sweep fill order; `QueueTracker` lifecycle and queue position
+  (rank, quantity ahead, remaining) before and after cancel/replace.
+* Differential: generated modification-heavy sequences compared
+  fill-by-fill against the reference model; `ExecutionStatistics`
+  (fill count, quantities, min/max price, exact 128-bit VWAP) verified
+  against collected fills.
+* Determinism: repeated runs identical; extended profile
+  (`TICKFORGE_EXTENDED=1`) with 10 seeds x 150 events.
+
+### 17.4 Findings
+
+No production defects. Two test-expectation corrections: (1) a modify
+with explicit same-price and zero quantity is a valid no-op, not
+`EmptyModify` (only both-zero is empty); (2) `ExecutionStatistics`
+attributes fills to the aggressor side (buy vs sell was reversed in the
+test).
