@@ -184,6 +184,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_replay_adversarial.cpp
     tests/test_modify_adversarial.cpp
     tests/test_config_metadata.cpp
+    tests/test_csv_stream.cpp
     tests/test_property_matching.cpp
     tests/test_property_analytics.cpp
     tests/test_property_replay.cpp

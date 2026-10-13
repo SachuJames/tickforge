@@ -1145,3 +1145,64 @@ rollback). Separate replay sessions are fully isolated.
 
 No production defects. No test-expectation corrections were needed;
 all expectations were derived from the specification before running.
+
+## 19. Adversarial CSV stream verification (Day 16)
+
+### 19.1 Stream-reading model
+
+`CsvParser::parseStream` reads with `std::getline` in a loop: first
+line must equal the exact header after trimming spaces/tabs/CR;
+each subsequent line goes through `parseRecord` and parsing stops at
+the first error, returning the accepted prefix with the error and its
+one-based line number. Sequences are dense from 0 over accepted
+records only.
+
+Verified invariant: for identical input bytes, the parse result
+(events field-by-field, error, line number, diagnostic) does not
+depend on how the stream delivers bytes. Tested with a test-only
+`std::streambuf` delivering 1, 2, 3, 7, 16, 64, 256, and 4096-byte
+chunks, variable schedules, two-chunk splits at every byte position
+of a representative document, and CRLF split across refills.
+
+### 19.2 EOF versus read failure (limitation)
+
+`parseStream` never inspects the stream state after the read loop, so
+`StreamResult` cannot distinguish a clean EOF from an underlying
+read failure (`badbit`): a failure after complete records returns
+`ParseError::Ok` with the accepted prefix, and a failure mid-record
+discards the partial line silently. The distinction is observable
+only by the caller through the stream (`input.bad()`). Failure before
+any bytes is reported as `BadHeader` at line 1, identical to empty
+input. This is a documented limitation of the current API, not a
+hidden behavior: callers that need I/O-error detection must check the
+stream state themselves. If a caller sets an exception mask including
+`badbit`, streambuf failures propagate out of `parseStream` as
+exceptions (the concrete type is standard-library dependent).
+
+A parse error always takes precedence over a later read failure,
+because parsing stops at the first error before reading further.
+
+### 19.3 Byte-level behavior
+
+* BOM: not supported. A UTF-8 BOM before the header fails the exact
+  header check (`BadHeader`, line 1); a BOM inside a data field fails
+  that field's parse. No stripping is performed.
+* Embedded NUL: parsing is length-aware throughout, so NUL bytes are
+  never treated as terminators. A NUL inside a numeric field makes
+  that field invalid; a NUL-only line is a wrong-field-count record.
+  Bytes after a NUL are never silently dropped into a different
+  document: the record containing the NUL is rejected.
+* Trimming set is exactly space, tab, carriage return. Vertical tab
+  and form feed are not trimmed and fail numeric parsing; a CR inside
+  a field (not at line end) is rejected.
+* Blank lines (including a trailing blank line) are `EmptyRecord`
+  errors; the accepted prefix is preserved.
+
+### 19.4 Large records
+
+No line-length limit exists and none was added. Verified: a 1 MiB
+all-digit timestamp reports `NumericOverflow`; a 100k leading-zero
+timestamp parses to its exact value; an extra field after a 64 KiB
+valid prefix reports `WrongFieldCount`; a 256 KiB malformed line
+after a valid record preserves the prefix and reports line 3.
+Fragmented delivery of large lines matches ordinary delivery.
