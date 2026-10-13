@@ -1064,3 +1064,84 @@ with explicit same-price and zero quantity is a valid no-op, not
 `EmptyModify` (only both-zero is empty); (2) `ExecutionStatistics`
 attributes fills to the aggressor side (buy vs sell was reversed in the
 test).
+
+## 18. Session configuration and replay metadata verification (Day 15)
+
+### 18.1 Configuration contract (SPEC.md 10, from code inspection)
+
+`SessionConfig` fields: `instrument` (required, non-empty, must not
+contain `=`, `\n`, `\r`); `tickSize`/`lotSize` (optional decimal
+strings, validated as `\d+(\.\d+)?`, never parsed to float);
+`matchingRule` (only `PriceTimePriority`); `prngSeed` (optional
+uint64); `mode` (Strict/Lenient, default Strict).
+
+Validation errors: `EmptyInstrument`, `InvalidInstrument`,
+`InvalidTickSize`, `InvalidLotSize`, `UnknownMatchingRule`.
+Validation does not mutate its argument.
+
+### 18.2 Canonical serialization
+
+Format (byte-exact):
+```
+tickforge-config/1\n
+instrument=<value>\n
+[lot-size=<value>\n]
+matching-rule=price-time-priority\n
+mode=strict|lenient\n
+[prng-seed=<value>\n]
+[tick-size=<value>\n]
+```
+Keys in byte-wise sorted order; absent optionals omitted; LF-only line
+endings; no trailing whitespace. `deserializeConfig` round-trips:
+`deserialize(serialize(c)) == c` for every valid `c`. Malformed input
+is rejected with `ConfigParseError`, never repaired.
+
+### 18.3 Hash contract
+
+FNV-1a 64-bit over canonical serialization bytes (offset basis
+14695981039346656037, prime 1099511628211). Purpose is
+reproducibility and identity, NOT security. `formatConfigHash`
+renders 16 lowercase hex characters. Hash is deterministic across
+processes, platforms, and build modes (verified by known-answer tests
+in both Debug and Release).
+
+### 18.4 Replay metadata
+
+`ReplayResult.version` is `"0.1.0"` (stable format version from CMake
+project version, independent of build mode). `configHash` is populated
+only for the configured replay overload (`replayEvents(events,
+processor, config)`), on all paths including empty input and
+`InvalidConfig` failures (where it stays empty because replay never
+ran). The unconfigured overload never sets `configHash`. Invalid
+config fails before the processor observes anything; the result's
+`mode` reflects the config's mode.
+
+Config/event instrument mismatch is fatal (`InstrumentMismatch`) in
+both strict and lenient modes, whether on the first event or
+mid-stream. Mid-stream mismatch leaves prior events applied (no
+rollback). Separate replay sessions are fully isolated.
+
+### 18.5 Coverage (29 tests, `test_config_metadata.cpp`)
+
+* Validation: instrument with spaces (valid), case sensitivity (no
+  folding), `=`/newline rejection, tick-size boundary and invalid
+  formats, prng-seed 0 and max-uint64.
+* Serialization: exact bytes for lenient mode, prng-seed, byte-wise
+  key ordering, repeated-serialization stability.
+* Hash: independent test-side FNV-1a oracle; known-answer for minimal
+  config; per-field sensitivity; lowercase hex formatting.
+* Metadata: version stability, hash absent on unconfigured replay,
+  hash present and correct on configured replay, hash empty on
+  invalid config, hash matches the actual config used.
+* Config-gated replay: matching instruments, first-event mismatch,
+  mid-stream mismatch with prefix preservation, empty events,
+  session isolation.
+* Error matrix: invalid config in strict/lenient (processor observes
+  nothing).
+* Properties: serialization stability across instances, round-trip
+  semantics preservation, extended profile (20 seeds).
+
+### 18.6 Findings
+
+No production defects. No test-expectation corrections were needed;
+all expectations were derived from the specification before running.
