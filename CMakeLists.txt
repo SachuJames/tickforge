@@ -185,6 +185,8 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_modify_adversarial.cpp
     tests/test_config_metadata.cpp
     tests/test_csv_stream.cpp
+    tests/test_cli.cpp
+    tests/test_price_boundaries.cpp
     tests/test_property_matching.cpp
     tests/test_property_analytics.cpp
     tests/test_property_replay.cpp
@@ -195,6 +197,9 @@ if(TICKFORGE_BUILD_TESTS)
   )
   target_include_directories(tickforge_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data GTest::gtest_main)
+  # Process-boundary tests (test_cli.cpp) launch the real executable.
+  target_compile_definitions(tickforge_tests PRIVATE TICKFORGE_EXE_PATH="$<TARGET_FILE:tickforge>")
+  add_dependencies(tickforge_tests tickforge)
 
   include(GoogleTest)
   gtest_discover_tests(tickforge_tests)

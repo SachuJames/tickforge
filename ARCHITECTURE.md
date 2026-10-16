@@ -1206,3 +1206,55 @@ timestamp parses to its exact value; an extra field after a 64 KiB
 valid prefix reports `WrongFieldCount`; a 256 KiB malformed line
 after a valid record preserves the prefix and reports line 3.
 Fragmented delivery of large lines matches ordinary delivery.
+
+## 20. Executable boundary and integer boundaries (Day 17)
+
+### 20.1 There is no CLI yet (contract audit result)
+
+SPEC.md defines no command-line interface: no arguments, flags, file
+input, or exit-code contract appears anywhere in the specification.
+The `tickforge` executable is still the Day 01 entry point (the
+CMakeLists comment says so: "proves the build works, nothing more").
+It prints `TickForge v<version>` and `Engine initialized
+successfully.`, exits 0, and ignores argv entirely. It opens no
+files, parses no CSV, and runs no replay.
+
+Consequences:
+
+* The Day 16 EOF-versus-read-failure limitation cannot surface at a
+  process boundary today, because no process-level input path exists.
+  It remains a library-level documented limitation (section 19.2).
+* Any future CLI must check the stream state (`input.bad()`) after
+  `parseStream()` and must not treat a parser `Ok` with a partial
+  prefix as proof that the whole file was consumed. That requirement
+  is recorded here so the future implementation inherits it.
+* `tests/test_cli.cpp` pins the current process behavior (banner,
+  exit 0, empty stderr, argv ignored, byte-identical repeated runs,
+  working-directory independence) through a POSIX fork/exec harness
+  that launches the real binary. When a CLI is specified and built,
+  those tests are the baseline it replaces.
+
+### 20.2 Integer boundaries in matching and statistics
+
+Audit of the arithmetic (SPEC.md 2.4):
+
+* Matching compares prices only; it never adds, subtracts, or scales
+  them. Fill prices copy the resting order's price. Fill quantities
+  are the minimum of the two remaining quantities, so per-order
+  quantity subtraction cannot underflow or overflow.
+* `ExecutionStatistics` accumulates its VWAP numerator in a portable
+  128-bit hi/lo pair (no `__int128`), so a single fill at
+  `INT64_MAX` price has an exact numerator and VWAP.
+* Verified at the boundary (`tests/test_price_boundaries.cpp`):
+  fills at `INT64_MAX` and at price 1, best-price selection between
+  `INT64_MAX - 1` and `INT64_MAX`, partial fills of `INT64_MAX`
+  quantities, modify-to-`INT64_MAX` through cancel/replace, exact
+  statistics for maximal fills, and validation rejecting zero,
+  negative, and `INT64_MIN` order prices before matching.
+
+Known limitation: aggregate int64 sums (total lots in statistics,
+quantity-ahead in the queue tracker) are bounded by the sum of live
+order quantities. SPEC.md does not define behavior when that sum
+itself exceeds int64 (two fills near `INT64_MAX` lots each), so no
+semantics were invented and no test asserts a result there; tests
+cover aggregates up to `INT64_MAX - 1` lots, which stay exact.
