@@ -44,7 +44,8 @@ Event boundaryEvent(EventType type,
   return e;
 }
 
-Event newOrder(std::uint64_t id, Side side, std::int64_t price, std::int64_t qty, std::uint64_t seq) {
+Event newOrder(
+    std::uint64_t id, Side side, std::int64_t price, std::int64_t qty, std::uint64_t seq) {
   return boundaryEvent(EventType::NewOrder, id, side, price, qty, seq);
 }
 
@@ -58,8 +59,8 @@ std::vector<Fill> crossTwo(MatchingEngine& engine, const Event& first, const Eve
 TEST(PriceBoundary, FillAtInt64MaxPrice) {
   OrderBook book;
   MatchingEngine engine(book);
-  const auto fills = crossTwo(engine, newOrder(1, Side::Ask, kMax, 10, 0),
-                              newOrder(2, Side::Bid, kMax, 10, 1));
+  const auto fills =
+      crossTwo(engine, newOrder(1, Side::Ask, kMax, 10, 0), newOrder(2, Side::Bid, kMax, 10, 1));
   ASSERT_EQ(fills.size(), 1U);
   EXPECT_EQ(fills[0].price.ticks(), kMax);
   EXPECT_EQ(fills[0].quantity.lots(), 10);
@@ -92,8 +93,8 @@ TEST(PriceBoundary, FillAtMinimumPositivePrice) {
 TEST(PriceBoundary, HugeQuantityPartialFills) {
   OrderBook book;
   MatchingEngine engine(book);
-  const auto fills = crossTwo(engine, newOrder(1, Side::Ask, 100, kMax, 0),
-                              newOrder(2, Side::Bid, 100, 10, 1));
+  const auto fills =
+      crossTwo(engine, newOrder(1, Side::Ask, 100, kMax, 0), newOrder(2, Side::Bid, 100, 10, 1));
   ASSERT_EQ(fills.size(), 1U);
   EXPECT_EQ(fills[0].quantity.lots(), 10);
   // Maker remains with kMax - 10 (subtraction bounded by the fill).
@@ -104,8 +105,8 @@ TEST(PriceBoundary, HugeQuantityPartialFills) {
   // A maximal taker against a small maker rests the difference.
   OrderBook book2;
   MatchingEngine engine2(book2);
-  const auto fills2 = crossTwo(engine2, newOrder(1, Side::Ask, 100, 5, 0),
-                               newOrder(2, Side::Bid, 100, kMax, 1));
+  const auto fills2 =
+      crossTwo(engine2, newOrder(1, Side::Ask, 100, 5, 0), newOrder(2, Side::Bid, 100, kMax, 1));
   ASSERT_EQ(fills2.size(), 1U);
   EXPECT_EQ(fills2[0].quantity.lots(), 5);
   const auto taker = book2.find(OrderId{2});

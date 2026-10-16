@@ -16,19 +16,18 @@
 
 #include "tickforge/version.hpp"
 
-#include <gtest/gtest.h>
 #include <array>
 #include <csignal>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <gtest/gtest.h>
 #include <string>
-#include <system_error>
-#include <vector>
-
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <system_error>
 #include <unistd.h>
+#include <vector>
 
 #ifndef TICKFORGE_EXE_PATH
 #error "TICKFORGE_EXE_PATH must be defined by CMake (path to the tickforge executable)"
