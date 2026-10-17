@@ -374,3 +374,90 @@ Stage responsibilities:
 * **Fill:** a matched quantity between an incoming and a resting order.
 * **Tick:** minimum price increment of the instrument.
 * **Determinism guarantee:** the formal statement in section 4.1.
+
+---
+
+## 13. Command-line interface
+
+The `tickforge` executable replays one CSV event file through the
+library pipeline (sections 9 and 11). This section defines its
+contract; behavior not specified here is not part of the CLI.
+
+### 13.1 Invocation and options
+
+```text
+tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]
+tickforge --help
+tickforge --version
+```
+
+* `--input PATH` (required for replay): the CSV file to replay.
+  Relative paths resolve against the process working directory.
+* `--instrument SYMBOL` (required for replay): the session
+  instrument. The CSV format carries no instrument column, so the
+  instrument is a session property supplied here; it is used both as
+  the parser's instrument and as the session configuration's
+  instrument, and the two always agree.
+* `--mode strict|lenient` (optional, default `strict`): the replay
+  mode of section 11. Lenient mode skips invalid events and counts
+  them; it never relaxes CSV parsing, which still stops at the first
+  malformed record.
+* `--help`: prints usage to standard output and exits 0.
+* `--version`: prints `TickForge v<version>` and exits 0.
+
+Each option may appear at most once. Unknown options, positional
+arguments, missing option values, empty values, and invalid mode
+values are argument errors. Options are validated before `--help` or
+`--version` are honored, so a malformed command line is an error even
+if it also contains `--help`.
+
+### 13.2 Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | Replay succeeded, or a help/version request succeeded |
+| 2 | Invalid command-line arguments |
+| 3 | Input file could not be opened, or reading it failed |
+| 4 | CSV parsing failed (including event validation during parsing) |
+| 5 | Session configuration invalid, or replay failed |
+| 6 | Unexpected internal failure (an exception reached `main`) |
+
+### 13.3 Input processing
+
+The file is opened with `std::ifstream`. Failure to open is exit 3.
+The stream is parsed by `CsvParser::parseStream()` with unchanged
+parser semantics (section 9 input format: exact header, six fields,
+first-error termination, one-based line numbers). After parsing, the
+stream state is checked: if the stream's bad bit is set, the file did
+not read completely and the run fails with exit 3, even if the parser
+reported success for a prefix. A parse error is exit 4 and reports
+the parser error category and line number. Replay starts only after
+the input is known to be complete and well-formed.
+
+Empty files and header-only files are distinct: an empty file (or a
+file whose first line is not the header) is a parse failure (exit 4);
+a header-only file is a valid replay of zero events (exit 0).
+
+### 13.4 Output
+
+On success the summary is printed to standard output, exactly:
+
+```text
+TickForge v<version>
+Input: <path as given>
+Instrument: <symbol>
+Replay mode: <strict|lenient>
+Events processed: <applied event count>
+Events skipped: <lenient-mode skip count>
+Fills: <fill count>
+Resting orders: <orders left in the book>
+Best bid: <price ticks, or none>
+Best ask: <price ticks, or none>
+Config hash: <16 lowercase hex characters>
+Replay status: success
+```
+
+All diagnostics go to standard error; a failed run prints no success
+summary. Output contains no timestamps, addresses, or environment
+data: the same input file, instrument, and mode produce byte-identical
+output (the `Input:` line echoes the path exactly as supplied).

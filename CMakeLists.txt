@@ -132,10 +132,10 @@ add_library(tickforge_market_data STATIC
 target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_event tickforge_book)
 
 # ---------------------------------------------------------------------------
-# Main executable (Day 01: proves the build works, nothing more)
+# Main executable: the CLI defined in SPEC.md section 13.
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
-target_link_libraries(tickforge PRIVATE tickforge_core)
+target_link_libraries(tickforge PRIVATE tickforge_core tickforge_event tickforge_market_data tickforge_replay tickforge_book tickforge_matching)
 
 # ---------------------------------------------------------------------------
 # Tests
