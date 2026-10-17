@@ -1,18 +1,11 @@
 // Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
 //
-// Executable process-boundary verification.
+// Executable process-boundary verification for the CLI contract in
+// SPEC.md section 13. The harness launches the real `tickforge`
+// binary with fork/exec and pipes (no shell), captures stdout and
+// stderr separately, and reaps the child with a bounded wait.
 //
-// Contract audit (SPEC.md, ARCHITECTURE.md, CMakeLists.txt, main.cpp):
-// SPEC.md defines no command-line interface: no arguments, flags, file
-// input, or exit-code contract exists. The executable target is the
-// Day 01 entry point ("proves the build works, nothing more"): it
-// prints the version banner and exits 0, ignoring argv entirely.
-// These tests pin that actual behavior at the process boundary so a
-// future CLI lands against a documented baseline. They do not invent
-// a CLI contract the project has not specified.
-//
-// POSIX only: the project's CI runs on Ubuntu. The harness uses
-// fork/exec with pipes (no shell, no quoting hazards).
+// POSIX only: the project's CI runs on Ubuntu.
 
 #include "tickforge/version.hpp"
 
@@ -23,6 +16,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include <string>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <system_error>
@@ -117,70 +111,294 @@ ProcResult runExe(const std::vector<std::string>& args, const std::string& cwd =
   return result;
 }
 
-std::string expectedBanner() {
-  return std::string("TickForge v") + std::string(tickforge::kVersion) +
-         "\nEngine initialized successfully.\n";
-}
+constexpr const char* kHeader = "timestamp,event_type,order_id,side,price,quantity\n";
+constexpr const char* kCrossCsv = "timestamp,event_type,order_id,side,price,quantity\n"
+                                  "1000,N,1,A,101,5\n"
+                                  "2000,N,2,B,100,3\n"
+                                  "3000,N,3,B,101,5\n";
+
+// Per-test temporary directory for input fixtures.
+class CliFixture : public ::testing::Test {
+protected:
+  void SetUp() override {
+    const auto* info = ::testing::UnitTest::GetInstance()->current_test_info();
+    dir_ = std::filesystem::temp_directory_path() / (std::string("tf_cli_") + info->name());
+    std::error_code ec;
+    std::filesystem::remove_all(dir_, ec);
+    std::filesystem::create_directories(dir_);
+  }
+
+  void TearDown() override {
+    std::error_code ec;
+    std::filesystem::remove_all(dir_, ec);
+  }
+
+  // Writes `contents` to a file in the fixture directory, returns its path.
+  std::string writeFile(const std::string& name, const std::string& contents) {
+    const auto path = dir_ / name;
+    std::ofstream out(path);
+    out << contents;
+    return path.string();
+  }
+
+  // Runs the CLI against `path` with --instrument AAPL plus extras.
+  ProcResult runOn(const std::string& path, const std::vector<std::string>& extra = {}) {
+    std::vector<std::string> args{"--input", path, "--instrument", "AAPL"};
+    args.insert(args.end(), extra.begin(), extra.end());
+    return runExe(args);
+  }
+
+  std::filesystem::path dir_;
+};
 
 } // namespace
 
-TEST(CliProcess, NoArgsPrintsBannerAndExitsZero) {
-  const ProcResult result = runExe({});
-  EXPECT_FALSE(result.timedOut);
+// ---------------------------------------------------------------------
+// Help and version
+// ---------------------------------------------------------------------
+
+TEST(CliHelp, PrintsUsageAndExitsZero) {
+  const ProcResult result = runExe({"--help"});
   EXPECT_EQ(result.exitCode, 0);
-  EXPECT_EQ(result.out, expectedBanner());
+  EXPECT_TRUE(result.err.empty());
+  EXPECT_NE(result.out.find("Usage:"), std::string::npos);
+  EXPECT_NE(result.out.find("--input"), std::string::npos);
+  EXPECT_NE(result.out.find("--instrument"), std::string::npos);
+}
+
+TEST(CliHelp, UnknownOptionStillFails) {
+  // Options are validated before help is honored (SPEC.md 13.1).
+  const ProcResult result = runExe({"--bogus", "--help"});
+  EXPECT_EQ(result.exitCode, 2);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST(CliVersion, PrintsVersionAndExitsZero) {
+  const ProcResult result = runExe({"--version"});
+  EXPECT_EQ(result.exitCode, 0);
+  EXPECT_EQ(result.out, std::string("TickForge v") + std::string(tickforge::kVersion) + "\n");
   EXPECT_TRUE(result.err.empty());
 }
 
-TEST(CliProcess, ArgumentsAreNotInterpretedYet) {
-  // The Day 01 entry point ignores argv: unknown flags, mode-like
-  // options, and file paths (existing or not) change nothing. This
-  // pins the baseline a future CLI will replace.
-  const ProcResult base = runExe({});
-  for (const std::vector<std::string>& args :
-       {std::vector<std::string>{"--help"},
-        std::vector<std::string>{"--mode", "lenient"},
-        std::vector<std::string>{"events.csv"},
-        std::vector<std::string>{"/nonexistent/definitely/missing.csv"},
-        std::vector<std::string>{"-"}}) {
-    const ProcResult result = runExe(args);
-    EXPECT_EQ(result.exitCode, 0) << "args[0]=" << args[0];
-    EXPECT_EQ(result.out, base.out) << "args[0]=" << args[0];
-    EXPECT_TRUE(result.err.empty()) << "args[0]=" << args[0];
-  }
+// ---------------------------------------------------------------------
+// Argument validation (all exit 2, diagnostics on stderr only)
+// ---------------------------------------------------------------------
+
+TEST(CliArguments, NoArguments) {
+  const ProcResult result = runExe({});
+  EXPECT_EQ(result.exitCode, 2);
+  EXPECT_TRUE(result.out.empty());
+  EXPECT_NE(result.err.find("required"), std::string::npos);
 }
 
-TEST(CliProcess, DoesNotReadInputFiles) {
-  // A malformed CSV passed as an argument has no effect: no file is
-  // opened by the current executable.
-  const auto dir = std::filesystem::temp_directory_path() / "tickforge_cli_test";
-  std::error_code ec;
-  std::filesystem::create_directories(dir, ec);
-  const auto file = dir / "malformed.csv";
-  {
-    std::ofstream out(file);
-    out << "this,is,not,a,valid,header\nbroken\n";
+TEST(CliArguments, MissingInputValue) {
+  EXPECT_EQ(runExe({"--input"}).exitCode, 2);
+  // A following option is not consumed as the value.
+  EXPECT_EQ(runExe({"--input", "--instrument", "AAPL"}).exitCode, 2);
+}
+
+TEST(CliArguments, UnknownOption) {
+  const ProcResult result = runExe({"--bogus"});
+  EXPECT_EQ(result.exitCode, 2);
+  EXPECT_NE(result.err.find("unknown argument"), std::string::npos);
+}
+
+TEST(CliArguments, PositionalArgumentRejected) {
+  const ProcResult result = runExe({"events.csv", "--instrument", "AAPL"});
+  EXPECT_EQ(result.exitCode, 2);
+}
+
+TEST(CliArguments, InvalidMode) {
+  const ProcResult result = runExe({"--mode", "turbo"});
+  EXPECT_EQ(result.exitCode, 2);
+  EXPECT_NE(result.err.find("invalid mode"), std::string::npos);
+}
+
+TEST(CliArguments, DuplicateInput) {
+  const ProcResult result = runExe({"--input", "a.csv", "--input", "b.csv"});
+  EXPECT_EQ(result.exitCode, 2);
+}
+
+TEST(CliArguments, EmptyInputValue) {
+  const ProcResult result = runExe({"--input", "", "--instrument", "AAPL"});
+  EXPECT_EQ(result.exitCode, 2);
+}
+
+TEST(CliArguments, MissingInstrumentCheckedBeforeFiles) {
+  // A nonexistent input plus a missing instrument is an argument
+  // error (2), not a file error (3): required options come first.
+  const ProcResult result = runExe({"--input", "/nonexistent/definitely/missing.csv"});
+  EXPECT_EQ(result.exitCode, 2);
+}
+
+// ---------------------------------------------------------------------
+// Input handling
+// ---------------------------------------------------------------------
+
+TEST_F(CliFixture, MissingFileIsInputError) {
+  const ProcResult result = runOn((dir_ / "missing.csv").string());
+  EXPECT_EQ(result.exitCode, 3);
+  EXPECT_NE(result.err.find("cannot open input file"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, DirectoryIsReadFailureNotParseError) {
+  // A directory opens as a stream on Linux but reads fail: the bad
+  // bit check classifies it as exit 3, not a header parse error.
+  const ProcResult result = runOn(dir_.string());
+  EXPECT_EQ(result.exitCode, 3);
+  EXPECT_NE(result.err.find("failed while reading input file"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, UnreadableFileIsInputError) {
+  if (::geteuid() == 0) {
+    GTEST_SKIP() << "running as root: permission bits are bypassed";
   }
-  const ProcResult result = runExe({file.string()});
+  const std::string path = writeFile("locked.csv", kCrossCsv);
+  ::chmod(path.c_str(), 0000);
+  const ProcResult result = runOn(path);
+  ::chmod(path.c_str(), 0600);
+  EXPECT_EQ(result.exitCode, 3);
+  EXPECT_NE(result.err.find("cannot open input file"), std::string::npos);
+}
+
+TEST_F(CliFixture, EmptyFileIsParseError) {
+  const ProcResult result = runOn(writeFile("empty.csv", ""));
+  EXPECT_EQ(result.exitCode, 4);
+  EXPECT_NE(result.err.find("bad header"), std::string::npos);
+  EXPECT_NE(result.err.find("line 1"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, MalformedHeaderIsParseError) {
+  const ProcResult result = runOn(writeFile("badheader.csv", "a,b,c\n1000,N,1,B,100,1\n"));
+  EXPECT_EQ(result.exitCode, 4);
+  EXPECT_NE(result.err.find("bad header"), std::string::npos);
+}
+
+TEST_F(CliFixture, MalformedRecordReportsLineAndNoSummary) {
+  const std::string csv = std::string(kHeader) + "1000,N,1,B,100,1\nbroken\n";
+  const ProcResult result = runOn(writeFile("bad.csv", csv));
+  EXPECT_EQ(result.exitCode, 4);
+  EXPECT_NE(result.err.find("line 3"), std::string::npos);
+  EXPECT_NE(result.err.find("wrong field count"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, NumericOverflowRecordIsParseError) {
+  const std::string csv = std::string(kHeader) + "1000,N,1,B,99999999999999999999,1\n";
+  const ProcResult result = runOn(writeFile("overflow.csv", csv));
+  EXPECT_EQ(result.exitCode, 4);
+  EXPECT_NE(result.err.find("numeric overflow"), std::string::npos);
+}
+
+TEST_F(CliFixture, IncompleteFinalRecordIsParseError) {
+  const std::string csv = std::string(kHeader) + "1000,N,1,B,100\n";
+  const ProcResult result = runOn(writeFile("short.csv", csv));
+  EXPECT_EQ(result.exitCode, 4);
+}
+
+TEST_F(CliFixture, InvalidInstrumentIsConfigError) {
+  // '=' is rejected by SessionConfig validation before any file work.
+  const std::string path = writeFile("ok.csv", kCrossCsv);
+  const ProcResult result = runExe({"--input", path, "--instrument", "AAP=L"});
+  EXPECT_EQ(result.exitCode, 5);
+  EXPECT_NE(result.err.find("invalid session configuration"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, PathWithSpacesWorks) {
+  const ProcResult result = runOn(writeFile("my events.csv", kCrossCsv));
   EXPECT_EQ(result.exitCode, 0);
-  EXPECT_EQ(result.out, expectedBanner());
-  std::filesystem::remove_all(dir, ec);
+  EXPECT_NE(result.out.find("Events processed: 3"), std::string::npos);
 }
 
-TEST(CliProcess, DeterministicAcrossRuns) {
-  const ProcResult first = runExe({});
+// ---------------------------------------------------------------------
+// Replay correctness through the executable
+// ---------------------------------------------------------------------
+
+TEST_F(CliFixture, ValidFileProducesExactSummary) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path);
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_TRUE(result.err.empty());
+  const std::string expected = std::string("TickForge v") + std::string(tickforge::kVersion) +
+                               "\nInput: " + path +
+                               "\nInstrument: AAPL\n"
+                               "Replay mode: strict\n"
+                               "Events processed: 3\n"
+                               "Events skipped: 0\n"
+                               "Fills: 1\n"
+                               "Resting orders: 1\n"
+                               "Best bid: 100\n"
+                               "Best ask: none\n"
+                               "Config hash: 5dddb109ead805bc\n"
+                               "Replay status: success\n";
+  EXPECT_EQ(result.out, expected);
+}
+
+TEST_F(CliFixture, HeaderOnlyFileSucceedsWithZeroEvents) {
+  const ProcResult result = runOn(writeFile("header.csv", kHeader));
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Events processed: 0"), std::string::npos);
+  EXPECT_NE(result.out.find("Fills: 0"), std::string::npos);
+  EXPECT_NE(result.out.find("Best bid: none"), std::string::npos);
+  EXPECT_NE(result.out.find("Best ask: none"), std::string::npos);
+}
+
+TEST_F(CliFixture, NoFinalNewlineStillSucceeds) {
+  std::string csv = kCrossCsv;
+  csv.pop_back(); // drop the trailing newline
+  const ProcResult result = runOn(writeFile("noeol.csv", csv));
+  EXPECT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Events processed: 3"), std::string::npos);
+}
+
+TEST_F(CliFixture, StrictRejectsUnknownOrder) {
+  const std::string csv = std::string(kHeader) + "1000,C,9,B,,\n";
+  const ProcResult result = runOn(writeFile("unknown.csv", csv));
+  EXPECT_EQ(result.exitCode, 5);
+  EXPECT_NE(result.err.find("UnknownOrder"), std::string::npos);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, LenientSkipsUnknownOrder) {
+  const std::string csv = std::string(kHeader) + "1000,C,9,B,,\n";
+  const ProcResult result = runOn(writeFile("unknown.csv", csv), {"--mode", "lenient"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Replay mode: lenient"), std::string::npos);
+  EXPECT_NE(result.out.find("Events processed: 0"), std::string::npos);
+  EXPECT_NE(result.out.find("Events skipped: 1"), std::string::npos);
+}
+
+TEST_F(CliFixture, LenientDoesNotRelaxCsvParsing) {
+  const std::string csv = std::string(kHeader) + "broken\n";
+  const ProcResult result = runOn(writeFile("bad.csv", csv), {"--mode", "lenient"});
+  EXPECT_EQ(result.exitCode, 4);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, RepeatedRunsAreByteIdentical) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult first = runOn(path);
   for (int i = 0; i < 3; ++i) {
-    const ProcResult again = runExe({});
+    const ProcResult again = runOn(path);
     EXPECT_EQ(again.exitCode, first.exitCode);
     EXPECT_EQ(again.out, first.out);
     EXPECT_EQ(again.err, first.err);
   }
 }
 
-TEST(CliProcess, IndependentOfWorkingDirectory) {
-  const ProcResult home = runExe({});
-  const ProcResult root = runExe({}, "/");
-  EXPECT_EQ(root.exitCode, home.exitCode);
-  EXPECT_EQ(root.out, home.out);
-  EXPECT_EQ(root.err, home.err);
+TEST_F(CliFixture, RelativeAndAbsolutePaths) {
+  const std::string absolute = writeFile("cross.csv", kCrossCsv);
+  // Relative: run with the fixture dir as cwd and a bare file name.
+  const ProcResult rel = runExe({"--input", "cross.csv", "--instrument", "AAPL"}, dir_.string());
+  ASSERT_EQ(rel.exitCode, 0);
+  EXPECT_NE(rel.out.find("Input: cross.csv"), std::string::npos);
+  EXPECT_NE(rel.out.find("Events processed: 3"), std::string::npos);
+  // Absolute from another directory: identical except the Input line.
+  const ProcResult abs = runExe({"--input", absolute, "--instrument", "AAPL"}, "/");
+  ASSERT_EQ(abs.exitCode, 0);
+  EXPECT_NE(abs.out.find("Events processed: 3"), std::string::npos);
 }

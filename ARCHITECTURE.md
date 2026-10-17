@@ -1258,3 +1258,55 @@ order quantities. SPEC.md does not define behavior when that sum
 itself exceeds int64 (two fills near `INT64_MAX` lots each), so no
 semantics were invented and no test asserts a result there; tests
 cover aggregates up to `INT64_MAX - 1` lots, which stay exact.
+
+## 21. Command-line interface (Day 18)
+
+SPEC.md section 13 defines the CLI contract; this section records
+how it is implemented. This supersedes the Day 17 finding in section
+20.1 (no CLI existed then).
+
+Call flow (`src/main.cpp`, the only CLI translation unit):
+
+```text
+main
+  -> parseArguments      (--input/--instrument/--mode/--help/--version,
+                          duplicates and unknown tokens rejected, exit 2)
+  -> validateConfig      (SessionConfig from --instrument and --mode,
+                          exit 5 on ConfigError)
+  -> std::ifstream       (open failure, exit 3)
+  -> CsvParser::parseStream
+  -> input.bad() check   (read failure, exit 3; runs BEFORE the parse
+                          result is read, closing the section 19.2
+                          limitation at the process boundary)
+  -> parse error check   (exit 4, with line number, category, and the
+                          parser's diagnostic)
+  -> replayEvents        (configured overload over MatchingEngine;
+                          fills read back from the engine, book state
+                          from the OrderBook; failure, exit 5)
+  -> summary on stdout   (format pinned by SPEC.md 13.4)
+```
+
+Design notes:
+
+* One `--instrument` value feeds both the parser and the session
+  configuration, so the two can never disagree; configuration and
+  event instrument mismatch is unreachable through the CLI.
+* No new library API was needed. Events processed is the parsed
+  count minus the result's `skippedCount`; the config hash shown is
+  the `ReplayResult.configHash` from the configured replay,
+  formatted with the library's `formatConfigHash`.
+* Exceptions are caught only at `main` and mapped to exit 6; library
+  error paths are value-based and handled where they occur.
+* Exit codes are named constants in `main.cpp`, matching SPEC.md
+  13.2. Diagnostics go to stderr; a failed run prints no summary.
+
+Testing: `tests/test_cli.cpp` drives the real executable through the
+Day 17 fork/exec harness (29 tests: help/version, the argument-error
+matrix, file-open and read-failure classification, parse failures
+with line numbers, strict/lenient replay fixtures with an exact
+summary match, byte-identical repeated runs, relative/absolute and
+space-containing paths). The unreadable-file test skips under root,
+which bypasses permission bits. Mid-read failures of regular files
+cannot be induced deterministically at the process boundary; the
+directory case exercises the bad-bit classification, and Day 16
+covers failing stream buffers at the library level.
