@@ -11,6 +11,7 @@
 #include "tickforge/book/order_book.hpp"
 #include "tickforge/market_data/csv_parser.hpp"
 #include "tickforge/matching/matching_engine.hpp"
+#include "tickforge/replay/event_processor.hpp"
 #include "tickforge/replay/replay.hpp"
 #include "tickforge/replay/session_config.hpp"
 #include "tickforge/version.hpp"
@@ -39,6 +40,29 @@ struct CliOptions {
   tickforge::ReplayMode mode = tickforge::ReplayMode::Strict;
   bool help = false;
   bool version = false;
+};
+
+// Accumulates every fill a replay produces. MatchingEngine::fills()
+// exposes only the most recent event's fills, so the total the CLI
+// reports must be collected per event.
+class FillCollector final : public tickforge::EventProcessor {
+public:
+  explicit FillCollector(tickforge::MatchingEngine& engine) : engine_(engine) {}
+
+  bool onEvent(const tickforge::Event& event) override {
+    const bool applied = engine_.onEvent(event);
+    const auto& produced = engine_.fills();
+    fills_.insert(fills_.end(), produced.begin(), produced.end());
+    return applied;
+  }
+
+  [[nodiscard]] const std::vector<tickforge::Fill>& fills() const noexcept {
+    return fills_;
+  }
+
+private:
+  tickforge::MatchingEngine& engine_;
+  std::vector<tickforge::Fill> fills_;
 };
 
 void printUsage(std::ostream& out) {
@@ -169,7 +193,8 @@ int runReplay(const CliOptions& options) {
 
   tickforge::OrderBook book;
   tickforge::MatchingEngine engine{book};
-  const tickforge::ReplayResult result = tickforge::replayEvents(parsed.events, engine, config);
+  FillCollector collector{engine};
+  const tickforge::ReplayResult result = tickforge::replayEvents(parsed.events, collector, config);
   if (!result.ok()) {
     std::cerr << "error: replay failed: " << tickforge::toString(result.error) << " at sequence "
               << result.failedAt.value();
@@ -188,7 +213,7 @@ int runReplay(const CliOptions& options) {
             << (options.mode == tickforge::ReplayMode::Strict ? "strict" : "lenient") << "\n";
   std::cout << "Events processed: " << processed << "\n";
   std::cout << "Events skipped: " << result.skippedCount << "\n";
-  std::cout << "Fills: " << engine.fills().size() << "\n";
+  std::cout << "Fills: " << collector.fills().size() << "\n";
   std::cout << "Resting orders: " << book.orderCount() << "\n";
   std::cout << "Best bid: ";
   if (const auto bestBid = book.bestBid(); bestBid.has_value()) {
