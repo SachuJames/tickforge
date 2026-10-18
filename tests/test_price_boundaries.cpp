@@ -13,7 +13,9 @@
 // in ARCHITECTURE.md instead of being assigned invented semantics.
 
 #include "tickforge/analytics/execution_statistics.hpp"
+#include "tickforge/analytics/queue_tracker.hpp"
 #include "tickforge/book/order_book.hpp"
+#include "tickforge/market_data/market_state.hpp"
 #include "tickforge/matching/matching_engine.hpp"
 #include "tickforge/replay/replay.hpp"
 
@@ -195,6 +197,61 @@ TEST(PriceBoundary, ValidationRejectsNonPositivePrices) {
       newOrder(1, Side::Bid, std::numeric_limits<std::int64_t>::min(), 10, 0)};
   const auto r3 = replayEvents(minPrice, engine3, ReplayMode::Strict);
   EXPECT_EQ(r3.error, ReplayError::InvalidEvent);
+}
+
+TEST(PriceBoundary, StatisticsTotalReachesInt64MaxExactly) {
+  // The largest representable aggregate: fills of kMax/2, kMax/2, and 1
+  // lot sum to exactly INT64_MAX and must stay exact. (One more lot
+  // would leave the representable range, which SPEC.md does not
+  // define; see ARCHITECTURE.md 22.)
+  ExecutionStatistics stats;
+  const std::int64_t quantities[3] = {kMax / 2, kMax / 2, 1};
+  for (std::uint64_t i = 0; i < 3; ++i) {
+    Fill fill;
+    fill.aggressorId = OrderId{10 + i};
+    fill.restingId = OrderId{20 + i};
+    fill.side = Side::Bid;
+    fill.price = Price{100};
+    fill.quantity = Quantity{quantities[i]};
+    fill.timestamp = Timestamp{1000000};
+    fill.sequence = Sequence{i};
+    stats.addFill(fill);
+  }
+  EXPECT_EQ(stats.totalQuantity().lots(), kMax);
+  const auto avg = stats.averagePrice();
+  ASSERT_TRUE(avg.has_value());
+  EXPECT_EQ(avg->quantitySum, kMax);
+}
+
+TEST(PriceBoundary, QueueAheadAtLargeFittingSum) {
+  OrderBook book;
+  MatchingEngine engine(book);
+  QueueTracker tracker;
+  tracker.designate(OrderId{3});
+  auto feed = [&](const Event& e) {
+    ASSERT_TRUE(engine.onEvent(e));
+    tracker.onEvent(e);
+    tracker.onFills(engine.fills());
+  };
+  feed(newOrder(1, Side::Bid, 100, kMax / 2, 0));
+  feed(newOrder(2, Side::Bid, 100, kMax / 2, 1));
+  feed(newOrder(3, Side::Bid, 100, 1, 2));
+  const auto pos = tracker.queuePosition(book, OrderId{3});
+  ASSERT_TRUE(pos.has_value());
+  EXPECT_EQ(pos->rank, 3U);
+  EXPECT_EQ(pos->quantityAhead.lots(), kMax - 1);
+}
+
+TEST(PriceBoundary, LevelAggregateAtLargeFittingSum) {
+  OrderBook book;
+  MatchingEngine engine(book);
+  EXPECT_TRUE(engine.onEvent(newOrder(1, Side::Bid, 100, kMax / 2, 0)));
+  EXPECT_TRUE(engine.onEvent(newOrder(2, Side::Bid, 100, kMax / 2, 1)));
+  const MarketStateView view(book);
+  const auto levels = view.levels(Side::Bid);
+  ASSERT_EQ(levels.size(), 1U);
+  EXPECT_EQ(levels[0].totalQuantity.lots(), kMax - 1);
+  EXPECT_EQ(levels[0].orderCount, 2U);
 }
 
 } // namespace
