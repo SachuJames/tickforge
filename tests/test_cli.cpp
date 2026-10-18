@@ -7,6 +7,8 @@
 //
 // POSIX only: the project's CI runs on Ubuntu.
 
+#include "tests/support/event_generator.hpp"
+#include "tests/support/reference_model.hpp"
 #include "tickforge/version.hpp"
 
 #include <array>
@@ -15,6 +17,8 @@
 #include <filesystem>
 #include <fstream>
 #include <gtest/gtest.h>
+#include <map>
+#include <sstream>
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -401,4 +405,133 @@ TEST_F(CliFixture, RelativeAndAbsolutePaths) {
   const ProcResult abs = runExe({"--input", absolute, "--instrument", "AAPL"}, "/");
   ASSERT_EQ(abs.exitCode, 0);
   EXPECT_NE(abs.out.find("Events processed: 3"), std::string::npos);
+}
+
+// ---------------------------------------------------------------------
+// Session-scale end-to-end (Day 19)
+// ---------------------------------------------------------------------
+
+namespace {
+
+// Serializes events in the parser's CSV format (zero price/quantity on
+// modify/cancel records become empty fields).
+std::string serializeEvents(const std::vector<tickforge::Event>& events) {
+  std::ostringstream out;
+  out << "timestamp,event_type,order_id,side,price,quantity\n";
+  for (const auto& e : events) {
+    out << e.timestamp.count() << ','
+        << (e.type == tickforge::EventType::NewOrder      ? 'N'
+            : e.type == tickforge::EventType::ModifyOrder ? 'M'
+                                                          : 'C')
+        << ',' << e.orderId.value() << ',' << (e.side == tickforge::Side::Bid ? 'B' : 'A') << ',';
+    if (e.price.ticks() != 0) {
+      out << e.price.ticks();
+    }
+    out << ',';
+    if (e.quantity.lots() != 0) {
+      out << e.quantity.lots();
+    }
+    out << '\n';
+  }
+  return out.str();
+}
+
+tickforge::test::GeneratorConfig cliSessionConfig() {
+  tickforge::test::GeneratorConfig config;
+  config.seed = 1901;
+  config.eventCount = 6000;
+  config.minPrice = 80;
+  config.maxPrice = 120;
+  config.minQuantity = 1;
+  config.maxQuantity = 50;
+  config.newWeight = 55;
+  config.cancelWeight = 20;
+  config.modifyWeight = 25;
+  config.instrument = "AAPL";
+  return config;
+}
+
+// Parses "Key: value" summary lines into a map.
+std::map<std::string, std::string> summaryFields(const std::string& out) {
+  std::map<std::string, std::string> fields;
+  std::istringstream lines(out);
+  std::string line;
+  while (std::getline(lines, line)) {
+    const auto colon = line.find(": ");
+    if (colon != std::string::npos) {
+      fields[line.substr(0, colon)] = line.substr(colon + 2);
+    }
+  }
+  return fields;
+}
+
+} // namespace
+
+TEST_F(CliFixture, FillCountAccumulatesAcrossEvents) {
+  // Regression: fills produced by different events must all be
+  // counted. MatchingEngine::fills() is per-event; a CLI that reads
+  // it after the replay sees only the last event's fills (here the
+  // last event rests, so the wrong answer would be 0).
+  const std::string csv = std::string(kHeader) + "1000,N,1,A,101,5\n"
+                                                 "2000,N,2,B,101,5\n"
+                                                 "3000,N,3,A,102,4\n"
+                                                 "4000,N,4,B,102,4\n"
+                                                 "5000,N,5,B,99,1\n";
+  const ProcResult result = runOn(writeFile("two_cross.csv", csv));
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Fills: 2"), std::string::npos);
+  EXPECT_NE(result.out.find("Resting orders: 1"), std::string::npos);
+}
+
+TEST_F(CliFixture, GeneratedSessionMatchesReferenceSummary) {
+  const auto events = tickforge::test::EventGenerator(cliSessionConfig()).generate();
+  // Independent expectations from the reference model.
+  tickforge::test::ReferenceBook ref;
+  std::size_t expectedFills = 0;
+  for (const auto& e : events) {
+    auto applied = ref.apply(e);
+    ASSERT_TRUE(applied.applied);
+    expectedFills += applied.fills.size();
+  }
+
+  const std::string path = writeFile("session.csv", serializeEvents(events));
+  const ProcResult result = runOn(path);
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_TRUE(result.err.empty());
+  const auto fields = summaryFields(result.out);
+  EXPECT_EQ(fields.at("Events processed"), "6000");
+  EXPECT_EQ(fields.at("Events skipped"), "0");
+  EXPECT_EQ(fields.at("Fills"), std::to_string(expectedFills));
+  EXPECT_EQ(fields.at("Resting orders"), std::to_string(ref.orderCount()));
+  const auto bestBid = ref.bestBid();
+  const auto bestAsk = ref.bestAsk();
+  EXPECT_EQ(fields.at("Best bid"), bestBid.has_value() ? std::to_string(bestBid->ticks()) : "none");
+  EXPECT_EQ(fields.at("Best ask"), bestAsk.has_value() ? std::to_string(bestAsk->ticks()) : "none");
+  EXPECT_EQ(fields.at("Config hash"), "5dddb109ead805bc");
+  EXPECT_EQ(fields.at("Replay status"), "success");
+
+  // Byte-identical on a repeated run with the same path.
+  const ProcResult again = runOn(path);
+  EXPECT_EQ(again.exitCode, 0);
+  EXPECT_EQ(again.out, result.out);
+}
+
+TEST_F(CliFixture, GeneratedSessionWithTrailingErrorEvent) {
+  const auto events = tickforge::test::EventGenerator(cliSessionConfig()).generate();
+  std::string csv = serializeEvents(events);
+  // Append a cancel of a never-existing order id (replay-level error,
+  // well-formed CSV). Timestamp stays strictly increasing.
+  const auto lastTs = events.back().timestamp.count();
+  csv += std::to_string(lastTs + 1000) + ",C,999999,B,,\n";
+  const std::string path = writeFile("session_err.csv", csv);
+
+  const ProcResult strict = runOn(path);
+  EXPECT_EQ(strict.exitCode, 5);
+  EXPECT_TRUE(strict.out.empty());
+
+  const ProcResult lenient = runOn(path, {"--mode", "lenient"});
+  ASSERT_EQ(lenient.exitCode, 0);
+  const auto fields = summaryFields(lenient.out);
+  EXPECT_EQ(fields.at("Events processed"), "6000");
+  EXPECT_EQ(fields.at("Events skipped"), "1");
 }

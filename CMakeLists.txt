@@ -186,6 +186,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_config_metadata.cpp
     tests/test_csv_stream.cpp
     tests/test_cli.cpp
+    tests/test_session_scale.cpp
     tests/test_price_boundaries.cpp
     tests/test_property_matching.cpp
     tests/test_property_analytics.cpp
