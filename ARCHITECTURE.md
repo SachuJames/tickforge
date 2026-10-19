@@ -1370,3 +1370,50 @@ semantics; widening the three accumulators to the existing hi/lo
 technique is the fallback if unbounded aggregates must be exact.
 Until that decision is made, the behavior past INT64_MAX total lots
 is undefined and must not be relied on.
+
+## 23. Aggregate arithmetic contract and CLI configuration (Day 20)
+
+### 23.1 Decision (SPEC.md 2.4)
+
+The aggregate question open since Day 17 is resolved as a
+documented bound plus defined arithmetic:
+
+* Contract: aggregate quantities (statistics totals and the VWAP
+  denominator, per-level totals, quantity-ahead) are exact while
+  the true sum fits int64. Sessions whose aggregates exceed
+  INT64_MAX lots are outside the supported domain; results past the
+  bound are not meaningful and must not be relied on.
+* Implementation: the four signed accumulation sites now accumulate
+  in uint64_t (operands are non-negative by validation, so the
+  unsigned sum is the true sum) and convert back on read, which
+  C++20 defines modulo 2^64. No input, in or out of domain, can
+  invoke undefined behavior through these sites, and every value
+  inside the domain is bit-identical to the previous signed
+  accumulation. Sites: ExecutionStatistics total/buy/sell lots
+  (the VWAP denominator is the same storage), QueueTracker
+  quantity-ahead, QueueTracker per-order filledLots, and
+  MarketStateView per-level totals.
+* Rejected alternatives: replay-level rejection of events that
+  would cross the bound (new error semantics, and per-event
+  validation cannot see aggregate state; cumulative statistics also
+  outlive the book, so a live-book bound alone cannot express it);
+  widening public totals to a hi/lo pair (the public types -
+  Quantity, WeightedAveragePrice - are int64 by contract; only the
+  VWAP numerator exposes a pair, and it was already exact).
+* A regression test drives all sites past the bound and asserts
+  only defined behavior (it fails under UBSan if any site regresses
+  to signed accumulation); values past the bound are not asserted.
+
+### 23.2 CLI configuration surface
+
+`--tick-size` and `--lot-size` pass decimal strings straight into
+SessionConfig and are judged only by validateConfig (invalid values
+are exit 5 configuration errors; the CLI keeps no second grammar).
+`--seed` is parsed in the CLI with std::from_chars as a strict
+unsigned 64-bit integer (exit 2 on any malformation, including
+overflow, signs, and trailing characters; 0 and UINT64_MAX are
+valid). Defaults are untouched: omitting all three reproduces the
+Day 18/19 configuration and hash exactly. CLI tests verify each
+option against a hash computed by the library from the equivalent
+SessionConfig, so the CLI is proven to report the replay result's
+own hash for the configuration it actually ran.
