@@ -200,6 +200,7 @@ if(TICKFORGE_BUILD_TESTS)
   target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data GTest::gtest_main)
   # Process-boundary tests (test_cli.cpp) launch the real executable.
   target_compile_definitions(tickforge_tests PRIVATE TICKFORGE_EXE_PATH="$<TARGET_FILE:tickforge>")
+  target_compile_definitions(tickforge_tests PRIVATE TICKFORGE_EXAMPLE_CSV="${CMAKE_SOURCE_DIR}/examples/sample_session.csv")
   add_dependencies(tickforge_tests tickforge)
 
   include(GoogleTest)

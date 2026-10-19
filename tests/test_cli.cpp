@@ -651,3 +651,33 @@ TEST_F(CliFixture, DefaultsUnchangedByNewOptions) {
   EXPECT_EQ(summaryFields(result.out).at("Config hash"), libraryHash(baseConfig()));
   EXPECT_EQ(libraryHash(baseConfig()), "5dddb109ead805bc");
 }
+
+// ---------------------------------------------------------------------
+// Committed quick-start example (Day 21)
+// ---------------------------------------------------------------------
+
+#ifndef TICKFORGE_EXAMPLE_CSV
+#error "TICKFORGE_EXAMPLE_CSV must be defined by CMake (path to examples/sample_session.csv)"
+#endif
+
+TEST(CliExample, CommittedSampleSessionMatchesDocumentedOutput) {
+  // The README's worked example, pinned: any change to the fixture,
+  // the summary format, or the default configuration breaks this
+  // test before it breaks a new user's first run.
+  const ProcResult result = runExe({"--input", TICKFORGE_EXAMPLE_CSV, "--instrument", "AAPL"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_TRUE(result.err.empty());
+  const std::string expected = std::string("TickForge v") + std::string(tickforge::kVersion) +
+                               "\nInput: " + std::string(TICKFORGE_EXAMPLE_CSV) +
+                               "\nInstrument: AAPL\n"
+                               "Replay mode: strict\n"
+                               "Events processed: 5\n"
+                               "Events skipped: 0\n"
+                               "Fills: 1\n"
+                               "Resting orders: 1\n"
+                               "Best bid: none\n"
+                               "Best ask: 105\n"
+                               "Config hash: 5dddb109ead805bc\n"
+                               "Replay status: success\n";
+  EXPECT_EQ(result.out, expected);
+}
