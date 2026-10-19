@@ -87,7 +87,9 @@ private:
   struct TrackedState {
     Quantity originalQuantity{0};
     Price currentPrice{0};
-    std::int64_t filledLots{0};
+    // Unsigned accumulation: fill quantities are non-negative, so
+    // this can never invoke signed-overflow UB (SPEC.md 2.4).
+    std::uint64_t filledLots{0};
     bool newSeen{false};
     bool cancelSeen{false};
   };

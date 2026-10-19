@@ -72,11 +72,12 @@ void QueueTracker::onEvent(const Event& event) {
 
 void QueueTracker::onFills(std::span<const Fill> fills) {
   for (const Fill& fill : fills) {
+    const auto lots = static_cast<std::uint64_t>(fill.quantity.lots());
     if (isTracked(fill.aggressorId)) {
-      stateFor(fill.aggressorId).filledLots += fill.quantity.lots();
+      stateFor(fill.aggressorId).filledLots += lots;
     }
     if (isTracked(fill.restingId) && fill.restingId != fill.aggressorId) {
-      stateFor(fill.restingId).filledLots += fill.quantity.lots();
+      stateFor(fill.restingId).filledLots += lots;
     }
   }
 }
@@ -92,7 +93,9 @@ std::optional<QueueTracker::QueuePosition> QueueTracker::queuePosition(const Ord
   }
   const std::vector<OrderId> levelIds = book.ordersAtLevel(order->side, order->price);
   std::size_t rank = 0;
-  std::int64_t ahead = 0;
+  // Unsigned accumulation: quantities are non-negative, so summing
+  // the level can never invoke signed-overflow UB (SPEC.md 2.4).
+  std::uint64_t ahead = 0;
   for (std::size_t i = 0; i < levelIds.size(); ++i) {
     if (levelIds[i] == id) {
       rank = i + 1; // 1-based (SPEC.md 8.1)
@@ -101,13 +104,14 @@ std::optional<QueueTracker::QueuePosition> QueueTracker::queuePosition(const Ord
     const auto aheadOrder = book.find(levelIds[i]);
     // Internal consistency: every id in the level snapshot is live.
     if (aheadOrder.has_value()) {
-      ahead += aheadOrder->quantity.lots();
+      ahead += static_cast<std::uint64_t>(aheadOrder->quantity.lots());
     }
   }
   if (rank == 0) {
     return std::nullopt;
   }
-  return QueuePosition{order->side, order->price, rank, Quantity{ahead}, order->quantity};
+  return QueuePosition{
+      order->side, order->price, rank, Quantity{static_cast<std::int64_t>(ahead)}, order->quantity};
 }
 
 QueueTracker::Lifecycle QueueTracker::lifecycle(const OrderBook& book, OrderId id) const {
@@ -125,7 +129,8 @@ QueueTracker::Lifecycle QueueTracker::lifecycle(const OrderBook& book, OrderId i
   if (state.cancelSeen) {
     return Lifecycle::Cancelled;
   }
-  if (state.originalQuantity.lots() > 0 && state.filledLots >= state.originalQuantity.lots()) {
+  if (state.originalQuantity.lots() > 0 &&
+      state.filledLots >= static_cast<std::uint64_t>(state.originalQuantity.lots())) {
     return Lifecycle::Filled;
   }
   return Lifecycle::Unknown;

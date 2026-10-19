@@ -32,17 +32,19 @@ aggregateLevel(const OrderBook& book, Side side, Price price) {
   if (ids.empty()) {
     return std::nullopt;
   }
-  std::int64_t total_lots = 0;
+  // Unsigned accumulation: quantities are non-negative, so the level
+  // sum can never invoke signed-overflow UB (SPEC.md 2.4).
+  std::uint64_t total_lots = 0;
   for (const OrderId id : ids) {
     const std::optional<RestingOrder> order = book.find(id);
     // The id came from the book's own level listing, so it must exist.
     // If it does not, the book is internally inconsistent; skip rather
     // than fabricate.
     if (order.has_value()) {
-      total_lots += order->quantity.lots();
+      total_lots += static_cast<std::uint64_t>(order->quantity.lots());
     }
   }
-  return LevelAggregate{price, Quantity{total_lots}, ids.size()};
+  return LevelAggregate{price, Quantity{static_cast<std::int64_t>(total_lots)}, ids.size()};
 }
 
 } // namespace

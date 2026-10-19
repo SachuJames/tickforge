@@ -56,9 +56,14 @@ public:
 
 private:
   std::size_t fillCount_{0};
-  std::int64_t totalLots_{0};
-  std::int64_t buyLots_{0};
-  std::int64_t sellLots_{0};
+  // Lot totals accumulate in uint64_t: quantities are non-negative,
+  // so the unsigned sum equals the true sum, and accumulation can
+  // never invoke signed-overflow undefined behavior (SPEC.md 2.4).
+  // Accessors convert back; within the supported aggregate domain
+  // (sum fits int64) every value is identical to a signed sum.
+  std::uint64_t totalLots_{0};
+  std::uint64_t buyLots_{0};
+  std::uint64_t sellLots_{0};
   std::optional<Price> minPrice_;
   std::optional<Price> maxPrice_;
   std::uint64_t priceQuantitySumHi_{0};

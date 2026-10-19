@@ -254,5 +254,49 @@ TEST(PriceBoundary, LevelAggregateAtLargeFittingSum) {
   EXPECT_EQ(levels[0].orderCount, 2U);
 }
 
+TEST(PriceBoundary, PastBoundAggregatesAreDefinedNotUndefined) {
+  // SPEC.md 2.4: aggregates past INT64_MAX total lots are outside the
+  // supported domain and their values are not meaningful, but no
+  // input may invoke undefined behavior. These scenarios overflowed
+  // signed int64 under the pre-Day-20 accumulation; under UBSan this
+  // test fails if any site regresses to signed accumulation. Values
+  // past the bound are deliberately not asserted.
+  ExecutionStatistics stats;
+  for (std::uint64_t i = 0; i < 2; ++i) {
+    Fill fill;
+    fill.aggressorId = OrderId{10 + i};
+    fill.restingId = OrderId{20 + i};
+    fill.side = Side::Bid;
+    fill.price = Price{100};
+    fill.quantity = Quantity{kMax};
+    fill.timestamp = Timestamp{1000000};
+    fill.sequence = Sequence{i};
+    stats.addFill(fill);
+  }
+  EXPECT_EQ(stats.fillCount(), 2U);
+  EXPECT_TRUE(stats.averagePrice().has_value());
+
+  OrderBook book;
+  MatchingEngine engine(book);
+  QueueTracker tracker;
+  tracker.designate(OrderId{3});
+  auto feed = [&](const Event& e) {
+    ASSERT_TRUE(engine.onEvent(e));
+    tracker.onEvent(e);
+    tracker.onFills(engine.fills());
+  };
+  feed(newOrder(1, Side::Bid, 100, kMax, 0));
+  feed(newOrder(2, Side::Bid, 100, kMax, 1));
+  feed(newOrder(3, Side::Bid, 100, 1, 2));
+  const auto pos = tracker.queuePosition(book, OrderId{3});
+  ASSERT_TRUE(pos.has_value());
+  EXPECT_EQ(pos->rank, 3U);
+
+  const MarketStateView view(book);
+  const auto levels = view.levels(Side::Bid);
+  ASSERT_EQ(levels.size(), 1U);
+  EXPECT_EQ(levels[0].orderCount, 3U);
+}
+
 } // namespace
 } // namespace tickforge::test

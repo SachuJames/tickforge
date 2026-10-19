@@ -93,6 +93,17 @@ for multi-session datasets; they are out of scope for Day 01.
   Floating point prices are FORBIDDEN in the simulation core because
   rounding and contraction behavior can differ across compilers and
   optimization levels, which would break the determinism guarantee.
+* Aggregate quantities (cumulative traded lots in execution
+  statistics, including the VWAP denominator; total quantity at one
+  price level; quantity ahead of an order) are sums of individual
+  quantities. They are exact while the true sum fits in `int64`. A
+  session whose aggregate sums exceed `INT64_MAX` lots is outside
+  the supported domain, in the same way as an event whose fields are
+  out of range: the individual values remain valid, but aggregate
+  results past that bound are not meaningful and MUST NOT be relied
+  on. Implementations MUST NOT invoke undefined behavior for any
+  input, in or out of that domain; the VWAP numerator is exempt from
+  the bound because it is accumulated exactly in 128 bits.
 
 ---
 
@@ -387,6 +398,7 @@ contract; behavior not specified here is not part of the CLI.
 
 ```text
 tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]
+                   [--tick-size VALUE] [--lot-size VALUE] [--seed VALUE]
 tickforge --help
 tickforge --version
 ```
@@ -402,6 +414,15 @@ tickforge --version
   mode of section 11. Lenient mode skips invalid events and counts
   them; it never relaxes CSV parsing, which still stops at the first
   malformed record.
+* `--tick-size VALUE`, `--lot-size VALUE` (optional): the session
+  configuration's tick and lot sizes (section 10), given as decimal
+  strings and validated by the configuration validator; an invalid
+  value is a configuration error (exit 5), reported by the validator,
+  not by a second CLI-side rule.
+* `--seed VALUE` (optional): the session configuration's PRNG seed.
+  An unsigned 64-bit decimal integer: no sign, no whitespace, no
+  trailing characters; `0` and `18446744073709551615` are valid. A
+  malformed or out-of-range seed is an argument error (exit 2).
 * `--help`: prints usage to standard output and exits 0.
 * `--version`: prints `TickForge v<version>` and exits 0.
 

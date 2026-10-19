@@ -10,11 +10,12 @@ namespace tickforge {
 
 void ExecutionStatistics::addFill(const Fill& fill) {
   ++fillCount_;
-  totalLots_ += fill.quantity.lots();
+  const auto lots = static_cast<std::uint64_t>(fill.quantity.lots());
+  totalLots_ += lots;
   if (fill.side == Side::Bid) {
-    buyLots_ += fill.quantity.lots();
+    buyLots_ += lots;
   } else {
-    sellLots_ += fill.quantity.lots();
+    sellLots_ += lots;
   }
   if (!minPrice_.has_value() || fill.price < *minPrice_) {
     minPrice_ = fill.price;
@@ -76,15 +77,15 @@ std::size_t ExecutionStatistics::fillCount() const noexcept {
 }
 
 Quantity ExecutionStatistics::totalQuantity() const noexcept {
-  return Quantity{totalLots_};
+  return Quantity{static_cast<std::int64_t>(totalLots_)};
 }
 
 Quantity ExecutionStatistics::buyQuantity() const noexcept {
-  return Quantity{buyLots_};
+  return Quantity{static_cast<std::int64_t>(buyLots_)};
 }
 
 Quantity ExecutionStatistics::sellQuantity() const noexcept {
-  return Quantity{sellLots_};
+  return Quantity{static_cast<std::int64_t>(sellLots_)};
 }
 
 std::optional<Price> ExecutionStatistics::minPrice() const noexcept {
@@ -100,7 +101,8 @@ ExecutionStatistics::averagePrice() const noexcept {
   if (fillCount_ == 0) {
     return std::nullopt;
   }
-  return WeightedAveragePrice{priceQuantitySumHi_, priceQuantitySumLo_, totalLots_};
+  return WeightedAveragePrice{
+      priceQuantitySumHi_, priceQuantitySumLo_, static_cast<std::int64_t>(totalLots_)};
 }
 
 } // namespace tickforge
