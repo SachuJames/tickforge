@@ -64,6 +64,13 @@ Other presets: `release` (optimized build in `build-release/`) and `asan`
 (Debug with AddressSanitizer and UndefinedBehaviorSanitizer in
 `build-asan/`).
 
+To install just the CLI executable (headers and libraries are not
+installed; there is no stable library installation contract yet):
+
+```bash
+cmake --install build-release --prefix /usr/local
+```
+
 ## Quick start
 
 The repository includes a five-event example session in

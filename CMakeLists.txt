@@ -137,6 +137,11 @@ target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_even
 add_executable(tickforge src/main.cpp)
 target_link_libraries(tickforge PRIVATE tickforge_core tickforge_event tickforge_market_data tickforge_replay tickforge_book tickforge_matching)
 
+# Installation: the CLI executable only. There is no stable library
+# installation contract yet, so headers and libraries are not installed.
+include(GNUInstallDirs)
+install(TARGETS tickforge RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
