@@ -16,6 +16,7 @@
 #include "tickforge/replay/session_config.hpp"
 #include "tickforge/version.hpp"
 
+#include <charconv>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -38,6 +39,9 @@ struct CliOptions {
   std::optional<std::string> input;
   std::optional<std::string> instrument;
   tickforge::ReplayMode mode = tickforge::ReplayMode::Strict;
+  std::optional<std::string> tickSize;
+  std::optional<std::string> lotSize;
+  std::optional<std::uint64_t> seed;
   bool help = false;
   bool version = false;
 };
@@ -67,6 +71,7 @@ private:
 
 void printUsage(std::ostream& out) {
   out << "Usage: tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]\n"
+         "                      [--tick-size VALUE] [--lot-size VALUE] [--seed VALUE]\n"
          "       tickforge --help\n"
          "       tickforge --version\n"
          "\n"
@@ -76,6 +81,9 @@ void printUsage(std::ostream& out) {
          "  --input PATH        CSV event file to replay (required)\n"
          "  --instrument SYMBOL Session instrument, e.g. AAPL (required)\n"
          "  --mode MODE         Replay mode: strict (default) or lenient\n"
+         "  --tick-size VALUE   Tick size as a decimal string, e.g. 0.01\n"
+         "  --lot-size VALUE    Lot size as a decimal string, e.g. 1\n"
+         "  --seed VALUE        PRNG seed, an unsigned 64-bit integer\n"
          "  --help              Print this usage information\n"
          "  --version           Print the TickForge version\n";
 }
@@ -145,6 +153,42 @@ bool parseArguments(const std::vector<std::string_view>& args, CliOptions& optio
       } else {
         return fail("invalid mode (expected strict or lenient)");
       }
+    } else if (arg == "--tick-size") {
+      if (options.tickSize.has_value()) {
+        return fail("duplicate option");
+      }
+      std::string value;
+      if (!takeValue(value)) {
+        return false;
+      }
+      options.tickSize = value;
+    } else if (arg == "--lot-size") {
+      if (options.lotSize.has_value()) {
+        return fail("duplicate option");
+      }
+      std::string value;
+      if (!takeValue(value)) {
+        return false;
+      }
+      options.lotSize = value;
+    } else if (arg == "--seed") {
+      if (options.seed.has_value()) {
+        return fail("duplicate option");
+      }
+      std::string value;
+      if (!takeValue(value)) {
+        return false;
+      }
+      // Strict unsigned 64-bit parse: no sign, no whitespace, no
+      // trailing characters, no overflow (SPEC.md 13.1).
+      std::uint64_t seed = 0;
+      const auto* first = value.data();
+      const auto* last = first + value.size();
+      const auto parsed = std::from_chars(first, last, seed);
+      if (parsed.ec != std::errc{} || parsed.ptr != last) {
+        return fail("invalid seed (expected an unsigned 64-bit integer)");
+      }
+      options.seed = seed;
     } else {
       return fail("unknown argument");
     }
@@ -157,6 +201,9 @@ int runReplay(const CliOptions& options) {
   tickforge::SessionConfig config;
   config.instrument = *options.instrument;
   config.mode = options.mode;
+  config.tickSize = options.tickSize;
+  config.lotSize = options.lotSize;
+  config.prngSeed = options.seed;
   if (const auto cfgError = tickforge::validateConfig(config);
       cfgError != tickforge::ConfigError::Ok) {
     std::cerr << "error: invalid session configuration: " << tickforge::toString(cfgError) << "\n";

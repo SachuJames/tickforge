@@ -9,6 +9,7 @@
 
 #include "tests/support/event_generator.hpp"
 #include "tests/support/reference_model.hpp"
+#include "tickforge/replay/session_config.hpp"
 #include "tickforge/version.hpp"
 
 #include <array>
@@ -534,4 +535,119 @@ TEST_F(CliFixture, GeneratedSessionWithTrailingErrorEvent) {
   const auto fields = summaryFields(lenient.out);
   EXPECT_EQ(fields.at("Events processed"), "6000");
   EXPECT_EQ(fields.at("Events skipped"), "1");
+}
+
+// ---------------------------------------------------------------------
+// CLI session-configuration options (Day 20)
+// ---------------------------------------------------------------------
+
+namespace {
+
+// The expected CLI config hash, computed by the library itself from
+// the equivalent SessionConfig (serializeConfig/hashConfig are the
+// Day 15 contract; the CLI must report the replay result's hash).
+std::string libraryHash(const tickforge::SessionConfig& config) {
+  return std::string(tickforge::formatConfigHash(tickforge::hashConfig(config)));
+}
+
+tickforge::SessionConfig baseConfig() {
+  tickforge::SessionConfig config;
+  config.instrument = "AAPL";
+  return config;
+}
+
+} // namespace
+
+TEST_F(CliFixture, TickSizeFlowsIntoConfigHash) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path, {"--tick-size", "0.01"});
+  ASSERT_EQ(result.exitCode, 0);
+  auto expected = baseConfig();
+  expected.tickSize = "0.01";
+  EXPECT_EQ(summaryFields(result.out).at("Config hash"), libraryHash(expected));
+  // And it differs from the default configuration's hash.
+  EXPECT_NE(libraryHash(expected), libraryHash(baseConfig()));
+}
+
+TEST_F(CliFixture, LotSizeAndSeedFlowIntoConfigHash) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path, {"--lot-size", "10", "--seed", "42"});
+  ASSERT_EQ(result.exitCode, 0);
+  auto expected = baseConfig();
+  expected.lotSize = "10";
+  expected.prngSeed = 42;
+  EXPECT_EQ(summaryFields(result.out).at("Config hash"), libraryHash(expected));
+}
+
+TEST_F(CliFixture, SeedBoundaryValuesAccepted) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  for (const char* seedText : {"0", "18446744073709551615"}) {
+    const ProcResult result = runOn(path, {"--seed", seedText});
+    ASSERT_EQ(result.exitCode, 0) << "seed " << seedText;
+    auto expected = baseConfig();
+    expected.prngSeed = std::stoull(std::string(seedText));
+    EXPECT_EQ(summaryFields(result.out).at("Config hash"), libraryHash(expected));
+  }
+}
+
+TEST_F(CliFixture, OptionOrderDoesNotChangeResult) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult a = runExe({"--input",
+                               path,
+                               "--instrument",
+                               "AAPL",
+                               "--seed",
+                               "7",
+                               "--tick-size",
+                               "0.5",
+                               "--mode",
+                               "lenient"});
+  const ProcResult b = runExe({"--mode",
+                               "lenient",
+                               "--tick-size",
+                               "0.5",
+                               "--seed",
+                               "7",
+                               "--instrument",
+                               "AAPL",
+                               "--input",
+                               path});
+  ASSERT_EQ(a.exitCode, 0);
+  ASSERT_EQ(b.exitCode, 0);
+  EXPECT_EQ(a.out, b.out);
+}
+
+TEST_F(CliFixture, InvalidTickSizeIsConfigError) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  for (const char* bad : {"1.2.3", "-0.5", "abc", "1."}) {
+    const ProcResult result = runOn(path, {"--tick-size", bad});
+    EXPECT_EQ(result.exitCode, 5) << "tick-size " << bad;
+    EXPECT_NE(result.err.find("invalid session configuration"), std::string::npos);
+    EXPECT_TRUE(result.out.empty());
+  }
+}
+
+TEST_F(CliFixture, SeedParseErrorsAreArgumentErrors) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  for (const char* bad : {"18446744073709551616", "-1", "12x", "1.5", "+7", " 7"}) {
+    const ProcResult result = runOn(path, {"--seed", bad});
+    EXPECT_EQ(result.exitCode, 2) << "seed '" << bad << "'";
+    EXPECT_TRUE(result.out.empty());
+  }
+}
+
+TEST_F(CliFixture, DuplicateConfigOptionsRejected) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  EXPECT_EQ(runOn(path, {"--seed", "1", "--seed", "2"}).exitCode, 2);
+  EXPECT_EQ(runOn(path, {"--tick-size", "0.01", "--tick-size", "0.02"}).exitCode, 2);
+  EXPECT_EQ(runOn(path, {"--lot-size", "1", "--lot-size", "2"}).exitCode, 2);
+}
+
+TEST_F(CliFixture, DefaultsUnchangedByNewOptions) {
+  // A command with no new options keeps the Day 18/19 default hash.
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path);
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_EQ(summaryFields(result.out).at("Config hash"), libraryHash(baseConfig()));
+  EXPECT_EQ(libraryHash(baseConfig()), "5dddb109ead805bc");
 }
