@@ -482,3 +482,79 @@ All diagnostics go to standard error; a failed run prints no success
 summary. Output contains no timestamps, addresses, or environment
 data: the same input file, instrument, and mode produce byte-identical
 output (the `Input:` line echoes the path exactly as supplied).
+
+---
+
+## 14. Deterministic session generation
+
+This section specifies the seeded event generator used by the test
+suite. The generator is test infrastructure: it produces valid event
+sessions for differential and property testing. It is not a
+production simulation model, and `SessionConfig.prngSeed` does not
+drive replay; replay remains a pure function of the parsed events
+and the configuration. Section 4.3 governs any future production
+model that needs randomness.
+
+### 14.1 PRNG
+
+The generator uses splitmix64. The state is a `uint64` initialized
+to the seed verbatim; every `uint64` value is a valid seed,
+including `0` and `2^64 - 1`. Each output is:
+
+```text
+state += 0x9E3779B97F4A7C15
+z = state
+z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
+z = (z ^ (z >> 27)) * 0x94D049BB133111EB
+output = z ^ (z >> 31)
+```
+
+All arithmetic is unsigned 64-bit, so the output stream is a pure
+function of the seed and the number of draws consumed, identical on
+every platform.
+
+### 14.2 Bounded mapping
+
+* `nextBounded(b)`, for `b > 0`, returns `next() % b`.
+* `nextRange(lo, hi)`, for `lo <= hi`, returns
+  `lo + nextBounded(hi - lo + 1)`.
+* `nextBool()` returns the low bit of `next()`.
+
+The modulo mapping has a small bias for bounds that do not divide
+2^64. That bias is acceptable for test generation and is part of
+this contract: changing the mapping changes every generated
+session.
+
+### 14.3 Generator
+
+Generation is parameterized by `GeneratorConfig`: the seed, the
+event count, inclusive price and quantity bounds, relative weights
+for new/cancel/modify operations, and the instrument label. A
+generator instance consumes its own PRNG stream; reproducibility is
+stated per instance constructed from an equal configuration.
+
+Generated sessions satisfy:
+
+* Order ids are assigned densely from 1 in creation order.
+* Sequences are dense from 0 in event order.
+* Timestamps start at 1,000,000 and strictly increase; after each
+  event the timestamp advances by a drawn value in [1, 1000].
+* Operations are chosen by one bounded draw against the cumulative
+  weights; when no order is live, the operation is a new order.
+* Prices and quantities are drawn uniformly (per 14.2) from the
+  configured inclusive bounds.
+* Cancels and modifies target live orders tracked by the
+  generator's internal reference book, so every generated event
+  passes `validateEvent()` and is accepted by the matching engine
+  in order: sessions are valid by construction. Generating invalid
+  or adversarial sessions is a separate concern and is not part of
+  this generator's contract.
+
+### 14.4 Reproducibility and versioning
+
+The same `GeneratorConfig` produces the identical event sequence,
+and the identical CSV serialization of it, on every platform. The
+algorithm, mapping, and draw order defined here are generation
+version 1. Changing any of them changes generated artifacts and
+MUST be recorded as a new generation version in this section and
+in the changelog before the change lands.

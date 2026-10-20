@@ -1417,3 +1417,23 @@ Day 18/19 configuration and hash exactly. CLI tests verify each
 option against a hash computed by the library from the equivalent
 SessionConfig, so the CLI is proven to report the replay result's
 own hash for the configuration it actually ran.
+
+## 24. Seeded session generation contract (Day 22)
+
+Investigation outcome: the seeded generation capability already
+existed in full as test infrastructure (DeterministicRng splitmix64,
+the lifecycle-aware EventGenerator, CsvGenerator), built on Day 11
+and exercised at session scale on Day 19. The seed reserved in
+SessionConfig since Day 15 has no production consumer, and SPEC
+section 4.3's condition for production randomness ("if a future
+model needs randomness") has not occurred, so no production model,
+API, or CLI mode was added.
+
+The gaps closed instead: the exact PRNG algorithm, bounded mapping,
+generator draw behavior, and validity guarantee were only
+implementation details, and the PRNG had no known-answer tests.
+SPEC section 14 now pins the contract (generation version 1), and
+the suite gained known-answer tests whose expected outputs were
+derived independently of the C++ implementation, plus multi-seed
+validity and differential coverage. The v0.1.0 release and its tag
+were not modified.
