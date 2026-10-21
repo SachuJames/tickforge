@@ -1437,3 +1437,65 @@ the suite gained known-answer tests whose expected outputs were
 derived independently of the C++ implementation, plus multi-seed
 validity and differential coverage. The v0.1.0 release and its tag
 were not modified.
+
+## 25. Production stochastic model: design investigation (Day 23)
+
+Question: should TickForge now gain its first production consumer
+of SessionConfig.prngSeed?
+
+Evidence found:
+
+* SPEC section 4.3 permits production randomness only through an
+  explicitly seeded deterministic PRNG, and names a stochastic
+  latency model as the example. It regulates how, not whether.
+* ARCHITECTURE section 1.6 sketches a Microstructure Model layer
+  (consumes fill records and book states, produces adjusted
+  execution outcomes, stochastic elements seeded per section 4.3),
+  and section 4 lists a MicrostructureModel interface as a future
+  extension point. No code implements it, and no section of SPEC
+  defines any model's semantics: no distribution, no units, no
+  adjustment rule, no output consumer.
+* Nothing in the current product consumes a latency value or an
+  adjusted outcome: ReplayResult carries no such field, the CLI
+  prints none, and the analytics documentation lists latency
+  models and anything stochastic as deliberately out of scope for
+  statistics.
+* The Day 22 generator is test infrastructure by its section 14
+  contract; promoting it would conflate test generation with a
+  production model and reverse a one-day-old specification
+  decision without a new requirement.
+
+Decision: no production stochastic model is implemented today.
+Both candidates fail the same test: a latency model has no
+defined quantity to compute or consumer to serve, and a
+production session-shape model has no production workflow.
+Implementing either would require inventing the distribution,
+its parameters, and its output contract, which is market
+behavior the project has no evidence for.
+
+Smallest concrete next step, when a latency output is actually
+wanted: one decision (simulated per-fill latency is a desired
+replay artifact) plus two parameter choices (distribution family
+and bounds) make the following shape implementable without
+touching matching semantics:
+
+* A LatencyModel in the section 1.6 layer that observes fills and
+  emits per-fill simulated latency samples as a separate optional
+  replay artifact. It never mutates events, fills, timestamps, or
+  statistics, so engine output is bit-identical with and without
+  it.
+* Seed ownership: the model instance owns a production SplitMix64
+  (the section 14.1 algorithm, as its own stream contract in the
+  core library, not a dependency on test support), seeded from
+  SessionConfig.prngSeed, advancing one draw per fill in fill
+  order.
+* Configuration: the model's parameters become new optional
+  SessionConfig fields, omitted when the model is disabled, so
+  existing configurations, the canonical format, and the default
+  configuration hash are unchanged. The seed's meaning does not
+  change: it was always the model's seed.
+* Verification: independently derived known-answer tests for the
+  production PRNG and the latency mapping, a non-interference
+  differential (engine results identical with the model attached
+  and detached), and boundary tests (no fills, seed 0, seed
+  UINT64_MAX).
