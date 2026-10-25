@@ -119,6 +119,14 @@ add_library(tickforge_analytics STATIC
 target_link_libraries(tickforge_analytics PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching)
 
 # ---------------------------------------------------------------------------
+# Microstructure model library (SPEC.md 15): the per-fill simulated
+# latency model and its engine observer. Observes fills only; never
+# feeds back into matching.
+# ---------------------------------------------------------------------------
+add_library(tickforge_model STATIC src/model/latency_model.cpp)
+target_link_libraries(tickforge_model PUBLIC tickforge_core tickforge_event tickforge_replay tickforge_matching)
+
+# ---------------------------------------------------------------------------
 # Market-data parser library (Day 06): deterministic CSV input boundary.
 # Public headers live in include/tickforge/market_data/; the implementation
 # in src/market_data/. Converts external CSV records into normalized
@@ -193,6 +201,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/test_cli.cpp
     tests/test_session_scale.cpp
     tests/test_seeded_generation.cpp
+    tests/test_latency_model.cpp
     tests/test_price_boundaries.cpp
     tests/test_property_matching.cpp
     tests/test_property_analytics.cpp
@@ -203,7 +212,7 @@ if(TICKFORGE_BUILD_TESTS)
     tests/support/csv_generator.cpp
   )
   target_include_directories(tickforge_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data GTest::gtest_main)
+  target_link_libraries(tickforge_tests PRIVATE tickforge_core tickforge_event tickforge_replay tickforge_book tickforge_matching tickforge_analytics tickforge_market_data tickforge_model GTest::gtest_main)
   # Process-boundary tests (test_cli.cpp) launch the real executable.
   target_compile_definitions(tickforge_tests PRIVATE TICKFORGE_EXE_PATH="$<TARGET_FILE:tickforge>")
   target_compile_definitions(tickforge_tests PRIVATE TICKFORGE_EXAMPLE_CSV="${CMAKE_SOURCE_DIR}/examples/sample_session.csv")
