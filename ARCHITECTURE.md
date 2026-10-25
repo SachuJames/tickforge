@@ -1499,3 +1499,44 @@ touching matching semantics:
   differential (engine results identical with the model attached
   and detached), and boundary tests (no fills, seed 0, seed
   UINT64_MAX).
+
+## 26. Latency model implementation (Day 24)
+
+Section 25's proposal is now implemented, in the narrowed observer
+form it specified. One scope note: the Day 23 record said bounds
+would be a product choice; in the event they are simply required
+configuration (no defaults were invented), which the Day 24
+contract states plainly in SPEC section 15.
+
+Shape of the implementation:
+
+* SplitMix64 moved into the core library
+  (include/tickforge/core/splitmix64.hpp) as the single
+  implementation. The test DeterministicRng is now an alias for
+  it, so generation version 1 (SPEC section 14) runs on the same
+  code it always did; the Day 22 known answers pin both names.
+* SessionConfig gained latencyMinNs/latencyMaxNs. Both present
+  plus a prngSeed enables the model; validateConfig rejects a
+  lone bound, a negative or reversed interval, and bounds without
+  a seed. Canonical keys latency-max-ns/latency-min-ns sit in byte
+  order after instrument; disabled configurations serialize and
+  hash exactly as before.
+* LatencyModel (tickforge_model) owns a SplitMix64 seeded from
+  the configuration and consumes one draw per observed fill:
+  sample = min + nextBounded(max - min + 1), computed with an
+  unsigned span so the widest interval [0, INT64_MAX] is exact.
+  Its artifact carries the model name/version, seed, bounds, and
+  the ordered samples; sample i belongs to fill i.
+* Integration is composition, the pattern the CLI already uses:
+  LatencyObserver wraps a MatchingEngine, forwards events, and
+  feeds each event's fills to the model. Replay itself is
+  unchanged; its existing configuration gate rejects invalid
+  latency configurations before any event is observed. The CLI
+  gained no options and its output is unchanged; the model is a
+  library capability, reachable through SessionConfig and the
+  observer.
+* Non-interference is tested, not assumed: a 2,000-event session
+  runs through a plain engine and through the observer, and every
+  fill field, the final book, and execution statistics including
+  the VWAP numerator words are compared equal, with the artifact
+  as the only difference.

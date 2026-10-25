@@ -558,3 +558,69 @@ algorithm, mapping, and draw order defined here are generation
 version 1. Changing any of them changes generated artifacts and
 MUST be recorded as a new generation version in this section and
 in the changelog before the change lands.
+
+---
+
+## 15. Per-fill latency model
+
+The latency model is the production stochastic model anticipated by
+section 4.3 and the first consumer of `prngSeed`. It observes
+completed fills and produces one simulated latency sample per fill.
+The samples are a simulation artifact for study: they are not
+measurements of any real exchange, gateway, or execution path,
+and no value in this section is an empirical claim.
+
+### 15.1 Enablement and configuration
+
+The model is disabled by default. It is enabled by a session
+configuration carrying both `latencyMinNs` and `latencyMaxNs`
+(canonical keys `latency-min-ns` and `latency-max-ns`), and
+enabling it requires `prngSeed`: the seed is the model's explicit
+seed, per section 4.3. `validateConfig` rejects, before any event
+is processed:
+
+* exactly one bound present (`LatencyBoundsIncomplete`),
+* a negative minimum or a maximum below the minimum
+  (`InvalidLatencyBounds`),
+* enabled bounds without a seed (`LatencySeedMissing`).
+
+Disabled configurations omit both keys from the canonical
+serialization, so every pre-existing configuration, including the
+default hash, is unchanged. Enabled configurations hash with the
+bounds and the seed as part of their identity.
+
+### 15.2 Sampling contract
+
+* Unit: integer nanoseconds, stored as `int64`.
+* Distribution: discrete uniform over the inclusive interval
+  [min, max], computed as `min + nextBounded(max - min + 1)` over
+  the production SplitMix64 (section 14.1's algorithm, as its own
+  production component and stream), with the modulo mapping of
+  section 14.2 and its documented bias.
+* The model instance owns its PRNG state, initialized from the
+  configuration's `prngSeed`. Instances share no state.
+* Exactly one draw is consumed per observed fill, in the order
+  fills are produced by the matching engine. A run with no fills
+  produces no samples and consumes no draws.
+* Association is positional: sample `i` belongs to the `i`-th fill
+  produced, in production order. The artifact (`LatencyArtifact`)
+  carries the model name and version, the seed, and the bounds
+  alongside the ordered samples.
+
+### 15.3 Isolation and reproducibility
+
+The model only observes. It MUST NOT modify fills, events, book
+state, statistics, timestamps, or replay outcomes; enabling it
+leaves every existing replay and matching result bit-identical,
+which the test suite verifies by differential comparison. For the
+same configuration and the same ordered fills, the artifact is
+identical on every platform: all arithmetic is unsigned 64-bit or
+bounded `int64` computation with no signed overflow.
+
+Model version 1 is the contract above (name `uniform-latency`).
+Changing the algorithm, the mapping, the draw count or order, the
+bounds interpretation, or the unit is a model-contract change and
+requires a new model version, recorded here and in the changelog.
+This section does not change the generation contract of section
+14; the two share the SplitMix64 algorithm but have separate
+streams, consumers, and versioning.
