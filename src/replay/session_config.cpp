@@ -35,6 +35,12 @@ std::string_view toString(ConfigError error) noexcept {
     return "InvalidLotSize";
   case ConfigError::UnknownMatchingRule:
     return "UnknownMatchingRule";
+  case ConfigError::LatencyBoundsIncomplete:
+    return "LatencyBoundsIncomplete";
+  case ConfigError::InvalidLatencyBounds:
+    return "InvalidLatencyBounds";
+  case ConfigError::LatencySeedMissing:
+    return "LatencySeedMissing";
   }
   return "Unknown";
 }
@@ -111,15 +117,33 @@ ConfigError validateConfig(const SessionConfig& config) noexcept {
   if (config.matchingRule != MatchingRule::PriceTimePriority) {
     return ConfigError::UnknownMatchingRule;
   }
+  if (config.latencyMinNs.has_value() != config.latencyMaxNs.has_value()) {
+    return ConfigError::LatencyBoundsIncomplete;
+  }
+  if (config.latencyMinNs.has_value()) {
+    if (*config.latencyMinNs < 0 || *config.latencyMaxNs < *config.latencyMinNs) {
+      return ConfigError::InvalidLatencyBounds;
+    }
+    if (!config.prngSeed.has_value()) {
+      return ConfigError::LatencySeedMissing;
+    }
+  }
   return ConfigError::Ok;
 }
 
 std::string serializeConfig(const SessionConfig& config) {
-  // Canonical key order (byte-wise): instrument, lot-size,
-  // matching-rule, mode, prng-seed, tick-size. Absent optionals are
-  // omitted. Assumes a validated config; see validateConfig.
+  // Canonical key order (byte-wise): instrument, latency-max-ns,
+  // latency-min-ns, lot-size, matching-rule, mode, prng-seed,
+  // tick-size. Absent optionals are omitted. Assumes a validated
+  // config; see validateConfig.
   std::string out = "tickforge-config/1\n";
   out += "instrument=" + config.instrument + "\n";
+  if (config.latencyMaxNs.has_value()) {
+    out += "latency-max-ns=" + std::to_string(*config.latencyMaxNs) + "\n";
+  }
+  if (config.latencyMinNs.has_value()) {
+    out += "latency-min-ns=" + std::to_string(*config.latencyMinNs) + "\n";
+  }
   if (config.lotSize.has_value()) {
     out += "lot-size=" + *config.lotSize + "\n";
   }
@@ -148,6 +172,8 @@ struct SeenFields {
   bool matchingRule = false;
   bool mode = false;
   bool prngSeed = false;
+  bool latencyMinNs = false;
+  bool latencyMaxNs = false;
 };
 
 // Splits text into '\n'-terminated lines. Returns false when trailing
@@ -171,6 +197,24 @@ struct SeenFields {
     return ConfigParseError::InvalidValue;
   }
   config.prngSeed = seed;
+  return ConfigParseError::Ok;
+}
+
+// Parses one latency bound as a strict signed 64-bit decimal. Range
+// and sign rules are validateConfig's job, applied by the caller's
+// final validation gate.
+[[nodiscard]] ConfigParseError
+applyLatencyBound(std::string_view value, bool isMin, SessionConfig& config) {
+  std::int64_t bound = 0;
+  const auto [ptr, ec] = std::from_chars(value.data(), value.data() + value.size(), bound);
+  if (ec != std::errc() || ptr != value.data() + value.size()) {
+    return ConfigParseError::InvalidValue;
+  }
+  if (isMin) {
+    config.latencyMinNs = bound;
+  } else {
+    config.latencyMaxNs = bound;
+  }
   return ConfigParseError::Ok;
 }
 
@@ -247,6 +291,18 @@ applyRuledField(const ParsedField& field, SessionConfig& config, SeenFields& see
     }
     seen.prngSeed = true;
     return applySeed(field.value, config);
+  } else if (field.key == "latency-min-ns") {
+    if (seen.latencyMinNs) {
+      return ConfigParseError::DuplicateField;
+    }
+    seen.latencyMinNs = true;
+    return applyLatencyBound(field.value, true, config);
+  } else if (field.key == "latency-max-ns") {
+    if (seen.latencyMaxNs) {
+      return ConfigParseError::DuplicateField;
+    }
+    seen.latencyMaxNs = true;
+    return applyLatencyBound(field.value, false, config);
   } else {
     return ConfigParseError::UnknownField;
   }

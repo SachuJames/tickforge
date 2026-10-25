@@ -59,6 +59,12 @@ struct SessionConfig {
   std::optional<std::string> lotSize;
   MatchingRule matchingRule = MatchingRule::PriceTimePriority;
   std::optional<std::uint64_t> prngSeed; // absent: no randomness in use
+  // Per-fill latency model bounds in nanoseconds (SPEC.md 15). The
+  // model is enabled only when both bounds are present, and enabling
+  // it requires prngSeed. Absent means disabled, and disabled fields
+  // are omitted from the canonical serialization.
+  std::optional<std::int64_t> latencyMinNs;
+  std::optional<std::int64_t> latencyMaxNs;
   ReplayMode mode = ReplayMode::Strict;
 
   [[nodiscard]] bool operator==(const SessionConfig&) const = default;
@@ -66,11 +72,14 @@ struct SessionConfig {
 
 enum class ConfigError : std::uint8_t {
   Ok = 0,
-  EmptyInstrument,    // instrument is empty
-  InvalidInstrument,  // instrument contains '=' or a newline (unserializable)
-  InvalidTickSize,    // not a valid decimal string
-  InvalidLotSize,     // not a valid decimal string
-  UnknownMatchingRule // not a known MatchingRule value
+  EmptyInstrument,         // instrument is empty
+  InvalidInstrument,       // instrument contains '=' or a newline (unserializable)
+  InvalidTickSize,         // not a valid decimal string
+  InvalidLotSize,          // not a valid decimal string
+  UnknownMatchingRule,     // not a known MatchingRule value
+  LatencyBoundsIncomplete, // exactly one of latencyMinNs/latencyMaxNs is set
+  InvalidLatencyBounds,    // min < 0 or max < min (SPEC.md 15)
+  LatencySeedMissing       // latency model enabled without a prngSeed
 };
 
 [[nodiscard]] std::string_view toString(ConfigError error) noexcept;
@@ -86,8 +95,9 @@ enum class ConfigError : std::uint8_t {
 // serialization):
 //   line 1: "tickforge-config/1"            (schema identifier + version)
 //   lines 2..n: "key=value", one per field, keys in byte-wise sorted
-//     order: instrument, lot-size, matching-rule, mode, prng-seed,
-//     tick-size. Absent optional fields are omitted.
+//     order: instrument, latency-max-ns, latency-min-ns, lot-size,
+//     matching-rule, mode, prng-seed, tick-size. Absent optional
+//     fields are omitted.
 //   lines end with '\n' (LF only); no trailing whitespace.
 //
 // Deterministic: equivalent effective configurations produce byte-identical
