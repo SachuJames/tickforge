@@ -1,6 +1,6 @@
 # TickForge Benchmarking Policy
 
-**Status:** Day 01. No benchmark harness exists yet and no performance claims are made.
+**Status:** Policy only for now. No benchmark harness exists yet and no performance claims are made.
 
 ## The rule
 
@@ -33,4 +33,4 @@ A public script will let anyone rerun the headline benchmark: it downloads the p
 
 ## Current state
 
-v0.1.0 makes zero performance claims. This document exists so the claims made later are honest.
+As of v0.2.0, TickForge still makes zero performance claims. This document exists so the claims made later are honest.

@@ -1,6 +1,6 @@
 # TickForge System Architecture
 
-**Status:** Day 01, current as of v0.1.0.
+**Status:** Current as of v0.2.0, including the per-fill latency model covered in sections 26 and 27.
 **Companion document:** `SPEC.md` (domain semantics). This document covers
 system structure: layers, data flow, performance boundaries, and extension
 points.
