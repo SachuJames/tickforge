@@ -399,6 +399,7 @@ contract; behavior not specified here is not part of the CLI.
 ```text
 tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]
                    [--tick-size VALUE] [--lot-size VALUE] [--seed VALUE]
+                   [--latency-min-ns VALUE] [--latency-max-ns VALUE]
 tickforge --help
 tickforge --version
 ```
@@ -423,6 +424,18 @@ tickforge --version
   An unsigned 64-bit decimal integer: no sign, no whitespace, no
   trailing characters; `0` and `18446744073709551615` are valid. A
   malformed or out-of-range seed is an argument error (exit 2).
+* `--latency-min-ns VALUE`, `--latency-max-ns VALUE` (optional):
+  the latency model's bounds in nanoseconds (section 15). Each is
+  a signed 64-bit decimal integer as text: no whitespace, no
+  trailing characters; a malformed or out-of-range value is an
+  argument error (exit 2). Whether the parsed values form a usable
+  configuration (both present, nonnegative, ordered, seed present)
+  is decided by the configuration validator, not the argument
+  parser: an unusable combination is a configuration error
+  (exit 5), reported before the input file is opened. Supplying
+  the bounds enables the latency model; supplying neither leaves
+  it disabled. `--seed` alone does not enable it, and a seed's
+  existing meaning is unchanged when the model is disabled.
 * `--help`: prints usage to standard output and exits 0.
 * `--version`: prints `TickForge v<version>` and exits 0.
 
@@ -482,6 +495,29 @@ All diagnostics go to standard error; a failed run prints no success
 summary. Output contains no timestamps, addresses, or environment
 data: the same input file, instrument, and mode produce byte-identical
 output (the `Input:` line echoes the path exactly as supplied).
+
+When the latency model is enabled (section 15), a latency section
+follows the summary above, in this order:
+
+```text
+Latency model: uniform-latency v<model version>
+Latency seed: <seed>
+Latency min (ns): <minimum bound>
+Latency max (ns): <maximum bound>
+Latency samples: <sample count>
+Latency sample <index> (ns): <sample>
+```
+
+One `Latency sample` line is printed per fill, in fill order,
+with zero-based indices matching the artifact's positional
+association (section 15.2). A replay with no fills prints the
+five header lines with a sample count of zero and no sample
+lines. The full ordered list is printed deliberately: it is the
+artifact itself, deterministic and directly verifiable, and no
+summary statistic is substituted for it. When the model is
+disabled, no latency section is printed and the output is exactly
+the twelve lines above. A failed run prints no latency section:
+there is no partial artifact.
 
 ---
 

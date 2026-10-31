@@ -1540,3 +1540,33 @@ Shape of the implementation:
   fill field, the final book, and execution statistics including
   the VWAP numerator words are compared equal, with the artifact
   as the only difference.
+
+## 27. Latency model CLI integration (Day 25)
+
+Section 26 closed by noting the model was a library capability
+with no CLI surface. The CLI now exposes it, end to end:
+
+arguments (--latency-min-ns / --latency-max-ns, parsed as strict
+int64 text; --seed as before) -> SessionConfig fields ->
+validateConfig, which still runs before the input file is opened,
+so an unusable combination (a lone bound, a negative or reversed
+interval, bounds without a seed) exits 5 before any event exists,
+while malformed option text exits 2 with the other argument
+errors -> CsvParser -> replayEvents -> FillCollector ->
+LatencyObserver -> MatchingEngine.
+
+Two composition notes. The observer sits between the collector
+and the engine: the collector delegates events through it and
+still reads fills from the engine, so the model observes exactly
+the fills the summary counts, and with latency disabled the chain
+collapses to the engine alone with no model constructed. The
+summary is unchanged; on success only, the latency section of
+SPEC 13.4 is appended (model identity, seed, bounds, count, then
+every sample in fill order). Failures print no section, so a
+partial artifact is never presented as a result.
+
+Config identity needed no changes: the enabled hash was already
+determined by Day 24's serialization. For the documented example
+(seed 42, bounds 1000 to 1999) it is 5212b75c2e1ebc7f, reproduced
+independently from the canonical text with a separate FNV-1a
+implementation and pinned by an exact-output process test.

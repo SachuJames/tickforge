@@ -109,6 +109,7 @@ summary.
 ```text
 tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]
                    [--tick-size VALUE] [--lot-size VALUE] [--seed VALUE]
+                   [--latency-min-ns VALUE] [--latency-max-ns VALUE]
 tickforge --help
 tickforge --version
 ```
@@ -120,12 +121,34 @@ tickforge --version
 | `--mode` | no | `strict` (default) or `lenient`. |
 | `--tick-size VALUE` | no | Tick size as a decimal string, e.g. `0.01`. Validated by the session configuration rules. |
 | `--lot-size VALUE` | no | Lot size as a decimal string, e.g. `1`. Validated the same way. |
-| `--seed VALUE` | no | PRNG seed, an unsigned 64-bit decimal integer (`0` to `18446744073709551615`). Stored in the session configuration and covered by its hash. No production component consumes randomness yet. |
+| `--seed VALUE` | no | PRNG seed, an unsigned 64-bit decimal integer (`0` to `18446744073709551615`). Stored in the session configuration and covered by its hash. Seeds the latency model when latency bounds are given. |
+| `--latency-min-ns VALUE` | no | Minimum simulated latency in nanoseconds. Needs `--latency-max-ns` and `--seed`. |
+| `--latency-max-ns VALUE` | no | Maximum simulated latency in nanoseconds. Needs `--latency-min-ns` and `--seed`. |
 | `--help`, `--version` | no | Print usage or the version and exit 0. Invalid arguments are still errors when combined with these. |
 
 Every option may appear at most once. A successful replay prints the
 12-line summary to stdout and nothing to stderr. Failures print one
 diagnostic to stderr and no summary.
+
+With both latency bounds and a seed, the replay also draws one
+simulated latency sample per fill from the seeded model and prints
+them after the summary:
+
+```console
+$ ./build/tickforge --input examples/sample_session.csv --instrument AAPL --seed 42 --latency-min-ns 1000 --latency-max-ns 1999
+...
+Latency model: uniform-latency v1
+Latency seed: 42
+Latency min (ns): 1000
+Latency max (ns): 1999
+Latency samples: 1
+Latency sample 0 (ns): 1413
+```
+
+The same seed, bounds, and input always produce the same samples.
+The values are simulated for study, not measurements of any real
+system, and enabling the model does not change the matching results
+above it.
 
 Exit codes:
 
