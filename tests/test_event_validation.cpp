@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Tests for validateEvent(): the explicit, separate validation step a
 // parser runs before normalized events reach the replay engine.

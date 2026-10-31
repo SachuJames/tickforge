@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Latency model tests (SPEC.md 15) and production SplitMix64 known
 // answers. Expected values were derived independently of the C++

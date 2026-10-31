@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // QueueTracker tests: position and quantity-ahead computation, queue
 // advancement on cancel/fill, lifecycle states, modify semantics, and

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Property tests for QueueTracker and ExecutionStatistics, cross-checked
 // against independently computed expectations over generated event

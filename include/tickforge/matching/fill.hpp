@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Fill: the deterministic execution record produced by the matching
 // engine (SPEC.md sections 4.2, 5.4, and 9, stage 6).

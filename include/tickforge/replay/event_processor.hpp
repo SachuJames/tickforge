@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // EventProcessor: the narrow interface between the deterministic replay
 // driver and the state it updates. The replay driver owns event ordering,

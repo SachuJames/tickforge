@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Replay error mode (SPEC.md section 11). Strict is the default; lenient
 // must be explicitly selected by the caller. Lives in its own header so

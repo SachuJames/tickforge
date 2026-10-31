@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // ExecutionStatistics tests: exact integer arithmetic, quantity-weighted
 // averages, min/max, buy/sell splits, conservation, and determinism.

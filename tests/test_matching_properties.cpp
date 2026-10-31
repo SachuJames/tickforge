@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Property-style tests for the matching engine: execution conservation,
 // price priority, FIFO priority, no-overfill, and determinism. These test

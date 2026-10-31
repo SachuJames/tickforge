@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Matching engine (SPEC.md sections 5.4 and 6): deterministic price-time
 // priority matching on top of the MBO order book.

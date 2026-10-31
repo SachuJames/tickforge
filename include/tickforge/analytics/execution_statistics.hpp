@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // ExecutionStatistics: deterministic aggregate statistics over Fill
 // records (SPEC.md section 9, stage 6: "Execution Results").

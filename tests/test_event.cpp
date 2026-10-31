@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Tests for the canonical Event: construction, equality, EventKey
 // extraction, and the (timestamp, sequence) ordering from SPEC.md 3.2.

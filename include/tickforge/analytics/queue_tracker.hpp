@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // QueueTracker: queue-position tracking for designated orders (SPEC.md
 // section 8). Answers: where is a designated order in its price-level

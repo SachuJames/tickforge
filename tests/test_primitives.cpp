@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Tests for the strongly typed domain primitives: Timestamp, Sequence,
 // OrderId, Price, Quantity. These types are pure values; semantic

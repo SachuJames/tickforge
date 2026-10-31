@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Adversarial replay-sequence tests: controlled mutations applied to
 // otherwise valid event sequences, verifying the replay driver's

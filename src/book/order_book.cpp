@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // MBO order book implementation. See include/tickforge/book/order_book.hpp
 // for the representation and the Day 03 scope notes.

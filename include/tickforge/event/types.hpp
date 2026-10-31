@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Strongly typed domain primitives for the TickForge normalized event
 // model (SPEC.md section 2). Each wrapper exists so the compiler rejects

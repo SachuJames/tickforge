@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Property tests for replay: determinism over generated sequences,
 // strict-mode abort semantics, and lenient-mode skip semantics with

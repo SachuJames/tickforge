@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Canonical normalized event (SPEC.md section 2): the reproducibility
 // boundary of the TickForge pipeline. A parser's job ends when it hands

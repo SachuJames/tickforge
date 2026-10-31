@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Market-data integration tests: CSV -> Events -> Replay -> Matching ->
 // Analytics. Proves the parser is a clean input boundary producing the

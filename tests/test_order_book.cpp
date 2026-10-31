@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Unit tests for the MBO order book: insertion, FIFO price levels,
 // cancellation, modification (SPEC.md 5.5), best bid/ask, and the core

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Market-state integration tests: CSV -> parser -> matching engine ->
 // OrderBook -> MarketStateView. Proves the derived state pipeline is

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // MBO order book (SPEC.md section 5): individually tracked resting orders,
 // organized by side and price level. This is state, not matching: the book

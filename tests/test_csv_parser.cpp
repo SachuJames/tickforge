@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // CsvParser unit tests: valid records, syntax errors, numeric errors,
 // semantic rejection via validateEvent, and determinism.

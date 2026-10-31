@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Per-fill simulated latency model (SPEC.md 15). The model observes
 // completed fills and produces one simulated latency sample per

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // MarketStateView implementation. Every aggregate is computed from the
 // OrderBook's public read APIs (priceLevels, ordersAtLevel, find); the

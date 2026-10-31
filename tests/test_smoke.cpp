@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Day 01 smoke test: proves the test binary builds, links against the
 // TickForge core headers, runs under CTest, and sees the project version.

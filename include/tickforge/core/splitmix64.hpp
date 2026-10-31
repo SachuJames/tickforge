@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // SplitMix64 PRNG (SPEC.md 14.1): the project's single deterministic
 // random source. Production code and test infrastructure share this

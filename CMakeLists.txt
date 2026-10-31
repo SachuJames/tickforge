@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+# Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 #
 # TickForge: deterministic market microstructure simulator.
 # Day 01: build foundation only. No simulation subsystems are implemented yet.

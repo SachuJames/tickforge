@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Composition helper for the latency model (SPEC.md 15): wraps a
 // MatchingEngine as an EventProcessor, forwarding each event to the

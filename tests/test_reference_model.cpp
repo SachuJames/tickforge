@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Validates the independent reference model (test oracle) against
 // hand-calculated scenarios BEFORE it is used for differential testing.

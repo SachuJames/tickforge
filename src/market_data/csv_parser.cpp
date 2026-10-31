@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // CsvParser implementation. All numeric conversion uses std::from_chars:
 // locale-independent, exception-free, with exact overflow detection.

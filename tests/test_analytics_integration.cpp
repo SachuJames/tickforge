@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // End-to-end analytics integration: event stream -> replay -> matching
 // engine -> book, with the QueueTracker and ExecutionStatistics fed as

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Unit tests for the deterministic replay driver: ordering verification,
 // instrument scoping, the validation gate, dispatch, and the strict-mode

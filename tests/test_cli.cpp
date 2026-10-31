@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: MIT.
+// Copyright (c) 2026 Sachu James. SPDX-License-Identifier: Apache-2.0.
 //
 // Executable process-boundary verification for the CLI contract in
 // SPEC.md section 13. The harness launches the real `tickforge`
