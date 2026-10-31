@@ -681,3 +681,258 @@ TEST(CliExample, CommittedSampleSessionMatchesDocumentedOutput) {
                                "Replay status: success\n";
   EXPECT_EQ(result.out, expected);
 }
+
+// ---------------------------------------------------------------------
+// Latency model CLI integration (SPEC.md 13.4, 15)
+// ---------------------------------------------------------------------
+
+TEST(CliLatency, EnabledSampleSessionExactOutput) {
+  // The section 13.4 example, pinned end to end: the enabled hash
+  // 5212b75c2e1ebc7f was reproduced independently from the canonical
+  // serialization, and 1413 is the documented seed-42 first sample.
+  const ProcResult result = runExe({"--input",
+                                    TICKFORGE_EXAMPLE_CSV,
+                                    "--instrument",
+                                    "AAPL",
+                                    "--seed",
+                                    "42",
+                                    "--latency-min-ns",
+                                    "1000",
+                                    "--latency-max-ns",
+                                    "1999"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_TRUE(result.err.empty());
+  const std::string expected = std::string("TickForge v") + std::string(tickforge::kVersion) +
+                               "\nInput: " + std::string(TICKFORGE_EXAMPLE_CSV) +
+                               "\nInstrument: AAPL\n"
+                               "Replay mode: strict\n"
+                               "Events processed: 5\n"
+                               "Events skipped: 0\n"
+                               "Fills: 1\n"
+                               "Resting orders: 1\n"
+                               "Best bid: none\n"
+                               "Best ask: 105\n"
+                               "Config hash: 5212b75c2e1ebc7f\n"
+                               "Replay status: success\n"
+                               "Latency model: uniform-latency v1\n"
+                               "Latency seed: 42\n"
+                               "Latency min (ns): 1000\n"
+                               "Latency max (ns): 1999\n"
+                               "Latency samples: 1\n"
+                               "Latency sample 0 (ns): 1413\n";
+  EXPECT_EQ(result.out, expected);
+}
+
+TEST(CliLatency, DisabledByDefaultHasNoLatencySection) {
+  const ProcResult result = runExe({"--input", TICKFORGE_EXAMPLE_CSV, "--instrument", "AAPL"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_EQ(result.out.find("Latency"), std::string::npos);
+}
+
+TEST(CliLatency, HelpListsLatencyOptions) {
+  const ProcResult result = runExe({"--help"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("--latency-min-ns"), std::string::npos);
+  EXPECT_NE(result.out.find("--latency-max-ns"), std::string::npos);
+}
+
+TEST_F(CliFixture, LatencyMissingOneBoundIsConfigError) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult minOnly = runOn(path, {"--seed", "42", "--latency-min-ns", "1000"});
+  EXPECT_EQ(minOnly.exitCode, 5);
+  EXPECT_TRUE(minOnly.out.empty());
+  const ProcResult maxOnly = runOn(path, {"--seed", "42", "--latency-max-ns", "1999"});
+  EXPECT_EQ(maxOnly.exitCode, 5);
+  EXPECT_TRUE(maxOnly.out.empty());
+}
+
+TEST_F(CliFixture, LatencyBoundsWithoutSeedIsConfigError) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path, {"--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  EXPECT_EQ(result.exitCode, 5);
+  EXPECT_TRUE(result.out.empty());
+}
+
+TEST_F(CliFixture, LatencyNegativeAndReversedBoundsAreConfigErrors) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult negative =
+      runOn(path, {"--seed", "42", "--latency-min-ns", "-5", "--latency-max-ns", "1999"});
+  EXPECT_EQ(negative.exitCode, 5);
+  const ProcResult reversed =
+      runOn(path, {"--seed", "42", "--latency-min-ns", "2000", "--latency-max-ns", "1000"});
+  EXPECT_EQ(reversed.exitCode, 5);
+}
+
+TEST_F(CliFixture, LatencyMalformedBoundsAreUsageErrors) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  for (const char* bad : {"abc", "10x", "+5", "99999999999999999999", "1.5"}) {
+    const ProcResult result =
+        runOn(path, {"--seed", "42", "--latency-min-ns", bad, "--latency-max-ns", "1999"});
+    EXPECT_EQ(result.exitCode, 2) << "value: " << bad;
+    EXPECT_TRUE(result.out.empty());
+  }
+}
+
+TEST_F(CliFixture, LatencyMissingOrDuplicateValueIsUsageError) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult missing = runOn(path, {"--seed", "42", "--latency-min-ns"});
+  EXPECT_EQ(missing.exitCode, 2);
+  const ProcResult duplicate = runOn(path,
+                                     {"--seed",
+                                      "42",
+                                      "--latency-min-ns",
+                                      "1000",
+                                      "--latency-min-ns",
+                                      "1000",
+                                      "--latency-max-ns",
+                                      "1999"});
+  EXPECT_EQ(duplicate.exitCode, 2);
+  const ProcResult empty =
+      runOn(path, {"--seed", "42", "--latency-min-ns", "", "--latency-max-ns", "1999"});
+  EXPECT_EQ(empty.exitCode, 2);
+}
+
+TEST_F(CliFixture, LatencyInvalidSeedIsUsageError) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result =
+      runOn(path, {"--seed", "abc", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  EXPECT_EQ(result.exitCode, 2);
+}
+
+TEST_F(CliFixture, LatencyEqualAndExtremeBoundsAccepted) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult equal =
+      runOn(path, {"--seed", "42", "--latency-min-ns", "5000", "--latency-max-ns", "5000"});
+  ASSERT_EQ(equal.exitCode, 0);
+  EXPECT_NE(equal.out.find("Latency samples: 1\n"), std::string::npos);
+  EXPECT_NE(equal.out.find("Latency sample 0 (ns): 5000\n"), std::string::npos);
+
+  const ProcResult extreme = runOn(
+      path, {"--seed", "42", "--latency-min-ns", "0", "--latency-max-ns", "9223372036854775807"});
+  ASSERT_EQ(extreme.exitCode, 0);
+  EXPECT_NE(extreme.out.find("Latency max (ns): 9223372036854775807\n"), std::string::npos);
+  EXPECT_NE(extreme.out.find("Latency samples: 1\n"), std::string::npos);
+}
+
+TEST_F(CliFixture, LatencyMultiFillSamplesMatchKnownAnswers) {
+  // Three crossing bids against one resting ask: three fills, and
+  // the first three seed-42 samples at [1000, 1999] are the
+  // documented 1413, 1291, 1858 in fill order.
+  const std::string csv = std::string(kHeader) + "1000,N,1,A,105,10\n"
+                                                 "2000,N,2,B,105,2\n"
+                                                 "3000,N,3,B,105,3\n"
+                                                 "4000,N,4,B,105,1\n";
+  const ProcResult result =
+      runOn(writeFile("fills.csv", csv),
+            {"--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Fills: 3\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency samples: 3\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency sample 0 (ns): 1413\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency sample 1 (ns): 1291\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency sample 2 (ns): 1858\n"), std::string::npos);
+}
+
+TEST_F(CliFixture, LatencyEmptyFillSessionReportsZeroSamples) {
+  const std::string csv = std::string(kHeader) + "1000,N,1,A,105,10\n"
+                                                 "2000,N,2,B,100,2\n";
+  const ProcResult result =
+      runOn(writeFile("nofills.csv", csv),
+            {"--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Fills: 0\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency samples: 0\n"), std::string::npos);
+  EXPECT_EQ(result.out.find("Latency sample 0"), std::string::npos);
+}
+
+TEST_F(CliFixture, LatencyEnabledRunIsDeterministic) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const std::vector<std::string> flags{
+      "--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"};
+  const ProcResult first = runOn(path, flags);
+  const ProcResult second = runOn(path, flags);
+  ASSERT_EQ(first.exitCode, 0);
+  EXPECT_EQ(first.out, second.out);
+}
+
+TEST_F(CliFixture, LatencyDoesNotChangeMatchingSummary) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult disabled = runOn(path);
+  const ProcResult enabled =
+      runOn(path, {"--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  ASSERT_EQ(disabled.exitCode, 0);
+  ASSERT_EQ(enabled.exitCode, 0);
+  // Everything except the config hash line and the latency section
+  // must be identical.
+  auto matchingLines = [](const std::string& out) {
+    std::vector<std::string> lines;
+    std::string current;
+    for (const char c : out) {
+      if (c == '\n') {
+        if (!current.starts_with("Latency") && !current.starts_with("Config hash:")) {
+          lines.push_back(current);
+        }
+        current.clear();
+      } else {
+        current += c;
+      }
+    }
+    return lines;
+  };
+  EXPECT_EQ(matchingLines(disabled.out), matchingLines(enabled.out));
+  EXPECT_NE(disabled.out.find("Config hash: 5dddb109ead805bc"), std::string::npos);
+  EXPECT_EQ(enabled.out.find("Config hash: 5dddb109ead805bc"), std::string::npos);
+}
+
+TEST_F(CliFixture, LatencyFailuresPrintNoSummary) {
+  const ProcResult missing = runExe({"--input",
+                                     "/nonexistent/tf.csv",
+                                     "--instrument",
+                                     "AAPL",
+                                     "--seed",
+                                     "42",
+                                     "--latency-min-ns",
+                                     "1000",
+                                     "--latency-max-ns",
+                                     "1999"});
+  EXPECT_EQ(missing.exitCode, 3);
+  EXPECT_TRUE(missing.out.empty());
+
+  const std::string broken = std::string(kHeader) + "1000,N,1,B,100,1\nbroken\n";
+  const ProcResult parseFail =
+      runOn(writeFile("broken.csv", broken),
+            {"--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  EXPECT_EQ(parseFail.exitCode, 4);
+  EXPECT_TRUE(parseFail.out.empty());
+
+  // A fill happens, then a strict-mode replay error: no summary and
+  // no partial latency section may be printed.
+  const std::string fillThenError = std::string(kHeader) + "1000,N,1,A,105,10\n"
+                                                           "2000,N,2,B,105,2\n"
+                                                           "3000,C,99,B,,\n";
+  const ProcResult replayFail =
+      runOn(writeFile("fillerr.csv", fillThenError),
+            {"--seed", "42", "--latency-min-ns", "1000", "--latency-max-ns", "1999"});
+  EXPECT_EQ(replayFail.exitCode, 5);
+  EXPECT_TRUE(replayFail.out.empty());
+}
+
+TEST_F(CliFixture, LatencyCombinesWithOtherOptions) {
+  const std::string path = writeFile("cross.csv", kCrossCsv);
+  const ProcResult result = runOn(path,
+                                  {"--tick-size",
+                                   "0.01",
+                                   "--lot-size",
+                                   "1",
+                                   "--mode",
+                                   "lenient",
+                                   "--seed",
+                                   "42",
+                                   "--latency-min-ns",
+                                   "1000",
+                                   "--latency-max-ns",
+                                   "1999"});
+  ASSERT_EQ(result.exitCode, 0);
+  EXPECT_NE(result.out.find("Replay mode: lenient\n"), std::string::npos);
+  EXPECT_NE(result.out.find("Latency samples: 1\n"), std::string::npos);
+}
