@@ -1,13 +1,19 @@
+<div align="center">
+
 # TickForge
 
-Deterministic market-event replay and matching engine in C++20.
+**Deterministic market-event replay and matching engine in C++20.**
 
-![TickForge](docs/images/hero.webp)
+<img src="docs/images/hero.webp" alt="TickForge" width="100%"/>
 
 [![CI](https://github.com/SachuJames/tickforge/actions/workflows/ci.yml/badge.svg)](https://github.com/SachuJames/tickforge/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 ![C++20](https://img.shields.io/badge/C++-20-blue.svg)
 ![CMake](https://img.shields.io/badge/CMake-3.22+-064F8C.svg)
+
+[SPEC.md](SPEC.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [BENCHMARKING.md](BENCHMARKING.md) · [CHANGELOG.md](CHANGELOG.md)
+
+</div>
 
 TickForge replays a stream of order events (new, modify, cancel) through a
 market-by-order book with price-time priority matching. The same input always
@@ -18,6 +24,20 @@ source.
 
 It is a research and verification tool, not a trading system. There is no
 exchange connectivity, no live feed, no networking, and no order routing.
+
+## Contents
+
+- [What it does](#what-it-does)
+- [Build](#build)
+- [Quick start](#quick-start)
+- [CLI reference](#cli-reference)
+- [Input format](#input-format)
+- [Determinism](#determinism)
+- [Tests](#tests)
+- [Layout](#layout)
+- [Limitations](#limitations)
+- [Version](#version)
+- [License](#license)
 
 ## What it does
 
