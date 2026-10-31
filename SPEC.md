@@ -1,7 +1,7 @@
 # TickForge Technical Specification
 
 **Status:** Day 01 draft, normative for all future implementation.
-**Version:** 0.1.0
+**Version:** 0.2.0
 **Language:** C++20 is the canonical implementation language.
 
 This document defines the domain concepts that TickForge must implement.

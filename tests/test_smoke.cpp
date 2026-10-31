@@ -19,12 +19,12 @@ TEST(SmokeTest, EngineInitializes) {
 TEST(VersionTest, VersionStringIsWellFormed) {
   const std::string version{tickforge::kVersion};
   EXPECT_FALSE(version.empty());
-  EXPECT_EQ(version, "0.1.0");
+  EXPECT_EQ(version, "0.2.0");
 }
 
 TEST(VersionTest, VersionComponentsMatchString) {
   EXPECT_EQ(tickforge::kVersionMajor, 0);
-  EXPECT_EQ(tickforge::kVersionMinor, 1);
+  EXPECT_EQ(tickforge::kVersionMinor, 2);
   EXPECT_EQ(tickforge::kVersionPatch, 0);
 }
 

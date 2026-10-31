@@ -6,7 +6,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 project(tickforge
-  VERSION 0.1.0
+  VERSION 0.2.0
   DESCRIPTION "Deterministic market microstructure simulator"
   HOMEPAGE_URL "https://github.com/SachuJames/tickforge"
   LANGUAGES CXX

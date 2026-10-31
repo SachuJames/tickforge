@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0
+
+- Per-fill simulated latency model (SPEC.md section 15). A seeded
+  SplitMix64 draws one latency sample per fill, uniform over a
+  configured inclusive interval in nanoseconds. The model only
+  observes fills: matching results are the same whether it is on
+  or off. Samples come back as a separate artifact carrying the
+  model name and version, the seed, and the bounds. The values are
+  simulated, not measurements of a real system.
+- Session configuration gained optional latency bounds
+  (latency-min-ns, latency-max-ns). Enabling the model requires
+  both bounds and a seed; configurations without them serialize
+  and hash exactly as in 0.1.0.
+- CLI: --latency-min-ns and --latency-max-ns options. An enabled
+  run appends a latency section to the summary with every sample
+  in fill order; the default output is unchanged.
+- SPEC.md section 14 pins the deterministic session-generation
+  contract (the SplitMix64 stream, the generator rules, generation
+  version 1), backed by known-answer tests for the stream and for
+  generated sessions across several seeds.
+
 ## 0.1.0
 
 First release.

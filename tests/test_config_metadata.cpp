@@ -213,13 +213,13 @@ TEST(ConfigHash, FormatIsLowercaseHex) {
 // --- Part 6: ReplayResult metadata ---
 
 TEST(ReplayMetadata, VersionIsStable) {
-  // kVersion is "0.1.0", a stable format version independent of build mode.
-  EXPECT_EQ(kVersion, "0.1.0");
+  // kVersion is "0.2.0", the project version independent of build mode.
+  EXPECT_EQ(kVersion, "0.2.0");
   OrderBook book;
   MatchingEngine engine(book);
   const std::vector<Event> events;
   const auto result = replayEvents(events, engine, ReplayMode::Strict);
-  EXPECT_EQ(result.version, "0.1.0");
+  EXPECT_EQ(result.version, "0.2.0");
 }
 
 TEST(ReplayMetadata, UnconfiguredReplayHasNoHash) {
@@ -241,7 +241,7 @@ TEST(ReplayMetadata, ConfiguredReplayHasHash) {
   ASSERT_TRUE(result.configHash.has_value());
   // NOLINTNEXTLINE(bugprone-unchecked-optional-access): asserted above.
   EXPECT_EQ(*result.configHash, expected);
-  EXPECT_EQ(result.version, "0.1.0");
+  EXPECT_EQ(result.version, "0.2.0");
   EXPECT_EQ(result.mode, ReplayMode::Strict);
 }
 

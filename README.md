@@ -85,7 +85,7 @@ bid is cancelled.
 Output:
 
 ```text
-TickForge v0.1.0
+TickForge v0.2.0
 Input: examples/sample_session.csv
 Instrument: AAPL
 Replay mode: strict
@@ -240,7 +240,7 @@ BENCHMARKING.md      benchmark methodology (no numbers without method)
 
 ## Version
 
-Current version: 0.1.0 (see the `project()` declaration in
+Current version: 0.2.0 (see the `project()` declaration in
 `CMakeLists.txt`; `tickforge --version` prints the same value). Changes
 are recorded in [CHANGELOG.md](CHANGELOG.md).
 
