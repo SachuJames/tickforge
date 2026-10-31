@@ -11,6 +11,8 @@
 #include "tickforge/book/order_book.hpp"
 #include "tickforge/market_data/csv_parser.hpp"
 #include "tickforge/matching/matching_engine.hpp"
+#include "tickforge/model/latency_model.hpp"
+#include "tickforge/model/latency_observer.hpp"
 #include "tickforge/replay/event_processor.hpp"
 #include "tickforge/replay/replay.hpp"
 #include "tickforge/replay/session_config.hpp"
@@ -42,19 +44,24 @@ struct CliOptions {
   std::optional<std::string> tickSize;
   std::optional<std::string> lotSize;
   std::optional<std::uint64_t> seed;
+  std::optional<std::int64_t> latencyMinNs;
+  std::optional<std::int64_t> latencyMaxNs;
   bool help = false;
   bool version = false;
 };
 
 // Accumulates every fill a replay produces. MatchingEngine::fills()
 // exposes only the most recent event's fills, so the total the CLI
-// reports must be collected per event.
+// reports must be collected per event. Events are delegated to an
+// inner processor (the engine itself, or the latency observer
+// wrapping it) while fills are read from the engine.
 class FillCollector final : public tickforge::EventProcessor {
 public:
-  explicit FillCollector(tickforge::MatchingEngine& engine) : engine_(engine) {}
+  FillCollector(tickforge::EventProcessor& processor, tickforge::MatchingEngine& engine)
+      : processor_(processor), engine_(engine) {}
 
   bool onEvent(const tickforge::Event& event) override {
-    const bool applied = engine_.onEvent(event);
+    const bool applied = processor_.onEvent(event);
     const auto& produced = engine_.fills();
     fills_.insert(fills_.end(), produced.begin(), produced.end());
     return applied;
@@ -65,6 +72,7 @@ public:
   }
 
 private:
+  tickforge::EventProcessor& processor_;
   tickforge::MatchingEngine& engine_;
   std::vector<tickforge::Fill> fills_;
 };
@@ -72,6 +80,7 @@ private:
 void printUsage(std::ostream& out) {
   out << "Usage: tickforge --input PATH --instrument SYMBOL [--mode strict|lenient]\n"
          "                      [--tick-size VALUE] [--lot-size VALUE] [--seed VALUE]\n"
+         "                      [--latency-min-ns VALUE] [--latency-max-ns VALUE]\n"
          "       tickforge --help\n"
          "       tickforge --version\n"
          "\n"
@@ -84,6 +93,10 @@ void printUsage(std::ostream& out) {
          "  --tick-size VALUE   Tick size as a decimal string, e.g. 0.01\n"
          "  --lot-size VALUE    Lot size as a decimal string, e.g. 1\n"
          "  --seed VALUE        PRNG seed, an unsigned 64-bit integer\n"
+         "  --latency-min-ns N  Minimum simulated latency in nanoseconds;\n"
+         "                      requires --latency-max-ns and --seed\n"
+         "  --latency-max-ns N  Maximum simulated latency in nanoseconds;\n"
+         "                      requires --latency-min-ns and --seed\n"
          "  --help              Print this usage information\n"
          "  --version           Print the TickForge version\n";
 }
@@ -106,6 +119,23 @@ bool parseArguments(const std::vector<std::string_view>& args, CliOptions& optio
       value = std::string(args[++i]);
       if (value.empty()) {
         return fail("empty value for option");
+      }
+      return true;
+    };
+    // Strict signed 64-bit parse for the latency bounds: no
+    // whitespace, no trailing characters, no overflow. Whether the
+    // value is a usable bound (nonnegative, ordered, seed present)
+    // is validateConfig's call, not the parser's (SPEC.md 13.1).
+    auto takeLatencyBound = [&](std::int64_t& bound) {
+      std::string value;
+      if (!takeValue(value)) {
+        return false;
+      }
+      const auto* first = value.data();
+      const auto* last = first + value.size();
+      const auto parsed = std::from_chars(first, last, bound);
+      if (parsed.ec != std::errc{} || parsed.ptr != last) {
+        return fail("invalid latency bound (expected a 64-bit integer)");
       }
       return true;
     };
@@ -189,11 +219,43 @@ bool parseArguments(const std::vector<std::string_view>& args, CliOptions& optio
         return fail("invalid seed (expected an unsigned 64-bit integer)");
       }
       options.seed = seed;
+    } else if (arg == "--latency-min-ns") {
+      if (options.latencyMinNs.has_value()) {
+        return fail("duplicate option");
+      }
+      std::int64_t bound = 0;
+      if (!takeLatencyBound(bound)) {
+        return false;
+      }
+      options.latencyMinNs = bound;
+    } else if (arg == "--latency-max-ns") {
+      if (options.latencyMaxNs.has_value()) {
+        return fail("duplicate option");
+      }
+      std::int64_t bound = 0;
+      if (!takeLatencyBound(bound)) {
+        return false;
+      }
+      options.latencyMaxNs = bound;
     } else {
       return fail("unknown argument");
     }
   }
   return true;
+}
+
+// Prints the optional latency section (SPEC.md 13.4): the model's
+// identity and bounds, then every sample in fill order with
+// zero-based indices. Simulated values, not measurements.
+void printLatencySection(const tickforge::LatencyArtifact& artifact) {
+  std::cout << "Latency model: " << artifact.modelName << " v" << artifact.modelVersion << "\n";
+  std::cout << "Latency seed: " << artifact.seed << "\n";
+  std::cout << "Latency min (ns): " << artifact.minLatencyNs << "\n";
+  std::cout << "Latency max (ns): " << artifact.maxLatencyNs << "\n";
+  std::cout << "Latency samples: " << artifact.samplesNs.size() << "\n";
+  for (std::size_t i = 0; i < artifact.samplesNs.size(); ++i) {
+    std::cout << "Latency sample " << i << " (ns): " << artifact.samplesNs[i] << "\n";
+  }
 }
 
 // Runs one replay from validated options; returns the exit code.
@@ -204,6 +266,8 @@ int runReplay(const CliOptions& options) {
   config.tickSize = options.tickSize;
   config.lotSize = options.lotSize;
   config.prngSeed = options.seed;
+  config.latencyMinNs = options.latencyMinNs;
+  config.latencyMaxNs = options.latencyMaxNs;
   if (const auto cfgError = tickforge::validateConfig(config);
       cfgError != tickforge::ConfigError::Ok) {
     std::cerr << "error: invalid session configuration: " << tickforge::toString(cfgError) << "\n";
@@ -240,7 +304,20 @@ int runReplay(const CliOptions& options) {
 
   tickforge::OrderBook book;
   tickforge::MatchingEngine engine{book};
-  FillCollector collector{engine};
+  // With latency enabled, the observer wraps the engine and the
+  // collector delegates through it, so the model sees exactly the
+  // fills the collector counts (SPEC.md 15.3). Disabled, the chain
+  // is the engine alone and no model exists.
+  const auto model = tickforge::LatencyModel::fromConfig(config);
+  std::optional<tickforge::LatencyObserver> observer;
+  if (model.has_value()) {
+    observer.emplace(engine, *model);
+  }
+  tickforge::EventProcessor* inner = &engine;
+  if (observer.has_value()) {
+    inner = &*observer;
+  }
+  FillCollector collector{*inner, engine};
   const tickforge::ReplayResult result = tickforge::replayEvents(parsed.events, collector, config);
   if (!result.ok()) {
     std::cerr << "error: replay failed: " << tickforge::toString(result.error) << " at sequence "
@@ -276,6 +353,9 @@ int runReplay(const CliOptions& options) {
   }
   std::cout << "Config hash: " << tickforge::formatConfigHash(*result.configHash) << "\n";
   std::cout << "Replay status: success\n";
+  if (observer.has_value()) {
+    printLatencySection(observer->artifact());
+  }
   return kExitOk;
 }
 

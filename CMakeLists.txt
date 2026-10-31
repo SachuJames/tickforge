@@ -143,7 +143,7 @@ target_link_libraries(tickforge_market_data PUBLIC tickforge_core tickforge_even
 # Main executable: the CLI defined in SPEC.md section 13.
 # ---------------------------------------------------------------------------
 add_executable(tickforge src/main.cpp)
-target_link_libraries(tickforge PRIVATE tickforge_core tickforge_event tickforge_market_data tickforge_replay tickforge_book tickforge_matching)
+target_link_libraries(tickforge PRIVATE tickforge_core tickforge_event tickforge_market_data tickforge_replay tickforge_book tickforge_matching tickforge_model)
 
 # Installation: the CLI executable only. There is no stable library
 # installation contract yet, so headers and libraries are not installed.
