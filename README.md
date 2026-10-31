@@ -34,19 +34,21 @@ exchange connectivity, no live feed, no networking, and no order routing.
   over the traded quantity), queue position for a designated order, and
   derived market-state views (best bid/ask, per-level aggregates).
 - Runs sessions under an explicit configuration (instrument, tick size,
-  lot size, matching rule, replay mode, optional PRNG seed) that is
-  serialized canonically and identified by a deterministic hash, printed
-  with every successful replay.
+  lot size, matching rule, replay mode, optional PRNG seed, optional
+  latency bounds) that is serialized canonically and identified by a
+  deterministic hash, printed with every successful replay.
 - Ships a CLI that replays a CSV file and prints a fixed summary.
 
-Correctness is checked against an independent, scan-based reference model:
-a generated 6,000-event session is compared event by event (every fill
-field, the resting book, best bid/ask) as part of the test suite, along
-with deterministic property tests and boundary tests at the int64 limits.
+Correctness is checked against an independent, scan-based reference
+model: a generated 6,000-event session is run through both, and the
+fills are compared field by field after every event, along with the
+resting order count, best bid/ask, and the execution statistics. The
+suite also has deterministic property tests and boundary tests at the
+int64 limits.
 
 ## Build
 
-Requirements: CMake 3.22 or newer, a C++20 compiler (GCC 11+ or Clang 14+),
+Requirements: CMake 3.22 or newer, a C++20 compiler (GCC or Clang),
 and Git. Building the tests fetches GoogleTest with CMake FetchContent on
 first configure, so the first configure needs network access. The library
 and the CLI have no third-party dependencies.
@@ -64,8 +66,9 @@ Other presets: `release` (optimized build in `build-release/`) and `asan`
 (Debug with AddressSanitizer and UndefinedBehaviorSanitizer in
 `build-asan/`).
 
-To install just the CLI executable (headers and libraries are not
-installed; there is no stable library installation contract yet):
+To install just the CLI executable from the release build (headers and
+libraries are not installed; there is no stable library installation
+contract yet):
 
 ```bash
 cmake --install build-release --prefix /usr/local
@@ -163,8 +166,9 @@ Exit codes:
 
 ## Input format
 
-The first line must be exactly this header (surrounding spaces, tabs, and a
-trailing carriage return are trimmed per field):
+The first line must be exactly this header. Whitespace at the ends of
+the line, and a trailing carriage return, are trimmed before the
+comparison; the fields of each record are trimmed the same way.
 
 ```text
 timestamp,event_type,order_id,side,price,quantity
@@ -183,8 +187,10 @@ Each record has six fields:
   changing the price or increasing the quantity is a cancel/replace and
   the order rejoins at the back of its new level.
 
-Timestamps must strictly increase across the file. A record that breaks
-the format stops parsing with an error; there is no partial-success parse.
+Timestamps must never decrease across the file; events that share a
+timestamp are ordered by their position in the file. A record that
+breaks the format stops parsing with an error; there is no
+partial-success parse.
 
 The full contract, including validation rules, matching semantics, the
 configuration format and its canonical hash, and the aggregate-arithmetic
@@ -214,21 +220,22 @@ TICKFORGE_EXTENDED=1 ./build/tickforge_tests
 The suite covers the event model, book, matching, analytics, CSV parser,
 session configuration and hashing, replay, the CLI (run as a real
 subprocess), and the reference-model differentials described above.
-Formatting is checked with clang-format 18 and static analysis with
-clang-tidy; CI runs format, tidy, GCC and Clang Debug/Release builds, and
-the sanitizer build on every push.
+Formatting is checked with clang-format and static analysis with
+clang-tidy. CI runs both, plus GCC and Clang Debug and Release builds
+and the sanitizer build, on every push and pull request.
 
 ## Layout
 
 ```text
-include/tickforge/   public headers (event, book, matching, replay,
-                     analytics, market_data)
+include/tickforge/   public headers (core, event, book, matching,
+                     replay, analytics, market_data, model)
 src/                 implementation, plus main.cpp (the CLI)
 tests/               GoogleTest suites and the property-test support code
 examples/            sample_session.csv, the quick-start session
 SPEC.md              normative behavior contract
 ARCHITECTURE.md      design notes and decision records
-BENCHMARKING.md      benchmark methodology (no numbers without method)
+BENCHMARKING.md      benchmarking policy: what a performance claim
+                     has to include before it counts as a result
 ```
 
 ## Limitations
